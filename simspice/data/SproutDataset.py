@@ -20,7 +20,7 @@ BATCH_SIZE = 32
 
 class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
     
-    def __init__(self, csv_files: str='L2_names.csv', file_dir: str='C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\', 
+    def __init__(self, csv_files: str='L2_names.csv', file_dir: str='C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\datasets_deepL\\', 
                  dataset_path = "C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc",
                  batch_size: int=BATCH_SIZE, augmentation_type: str='single', log_space=False, 
                  mu_doppler=0, sigma = 1, num_hits = 2,

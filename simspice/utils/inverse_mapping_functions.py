@@ -74,7 +74,7 @@ WAVELENGTHS_ARRAY = [ 698.6 ,  698.79,  698.98,  699.17,  699.36,  699.55,  699.
        1036.13, 1036.32, 1036.51]
 
 SIZE_CROPPED_MAP = 116160
-SHAPE_CROPPED_MAP = (605,192)
+SHAPE_CROPPED_MAP = 605,192
 
 def plot_n_random_spectra_cluster(labels, stacked_outputs, chosen_cluster, dataset, nbr_items=5, plot_on_map=False, log_scale=True,
                                   dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc"):
@@ -135,7 +135,7 @@ def map_clusters(labels, dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROU
     dataset = xr.open_dataset(dataset_path)
     nbr_files = int(len(dataset['index'])/SIZE_CROPPED_MAP)
     for x in range(nbr_files):
-        current_labels = labels[SIZE_CROPPED_MAP * x : SIZE_CROPPED_MAP * (x + 1)].reshapeSHAPE_CROPPED_MAP
+        current_labels = labels[SIZE_CROPPED_MAP * x : SIZE_CROPPED_MAP * (x + 1)].reshape(SHAPE_CROPPED_MAP)
         if selected_clusters is not None:
             masked_labels = np.where(np.isin(current_labels, selected_clusters), current_labels, np.nan)
         else:
