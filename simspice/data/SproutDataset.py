@@ -1,11 +1,17 @@
-from Augmentation import Augmentation
-from Sprout_ML import Sprout_ML
+import sys
+import os
+
+parent_dir = os.path.abspath(os.path.join(os.getcwd(), '..'))
+sys.path.append(parent_dir)
+
+from simspice.utils.Augmentation import Augmentation
+from simspice.data.Sprout_ML import Sprout_ML
 from torch.utils.data import Dataset
 import numpy as np
 import xarray as xr # type: ignore
 import pandas as pd
 import torch
-import os
+
 
 
 BATCH_SIZE = 32
