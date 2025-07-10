@@ -17,14 +17,14 @@ class Sprout_ML:
     Each of those windows is a 'raster', i.e. a 3D data cube with 2 spatial dimensions and 1 spectral dimension (we disregard the time dimension). 
     In other words, each raster is a 2D image where each pixel is a spectrum.
     '''
-    #min and max peak half width (sigma)
-    MIN_WIDTH = 0.2 #Angstrom
-    MAX_WIDTH = 0.8 #Angstrom # prev:2
+    #  min and max peak half width (sigma)
+    MIN_WIDTH = 0.2  #Angstrom
+    MAX_WIDTH = 0.8  #Angstrom # prev:2
     LINES = ['O III 702', 'O III 703', 'Mg IX 706', 'O II 718', 'Mg IX 749', 'S IV 750','Ne VIII 770', 'Mg VIII 772', 
         'S V 786', 'O IV 787', 'O IV 790', 'Ly-gamma 972', 'C III 977', 'O I / Na VI', 'N III 989', 'N III 991', 'O VI 1032']
 
     SIZE_CROPPED_MAP = 116160
-    SHAPE_CROPPED_MAP = (605,192)
+    SHAPE_CROPPED_MAP = (605, 192)
 
 
     def __init__(self, dir, filename, padding_size=10):
@@ -101,7 +101,6 @@ class Sprout_ML:
     def get_exposure(self, filename):
         '''Open the file and get the data'''
         return read_spice_l2_fits(filename, memmap=False)
-
     
     def get_keys(self):
         '''Prints the different windows of the Sprout file'''
@@ -133,7 +132,7 @@ class Sprout_ML:
         '''Returns a list of the actual numerical data of the rasters present in the file in W/m**2/nm/str'''
         cubes = []
         for key in self.get_keys():
-            cubes.append(np.nan_to_num(self.exposure[key][0,:,croplattop:croplatbottom,:].data))  # indexation starts at the top
+            cubes.append(np.nan_to_num(self.exposure[key][0, :, croplattop:croplatbottom, :].data))  # indexation starts at the top
         return cubes
     
     def get_cubes_uncropped(self):
@@ -143,9 +142,10 @@ class Sprout_ML:
             cubes.append(np.nan_to_num(self.exposure[key][0,:,:,:].data))
         return cubes
     
-    def whatsgoingon(self, key='Ne VIII 770 (Merged)', slice=20, croplattop=None, croplatbottom=None):
+    def whatsgoingon(self, key='Ne VIII 770 (Merged)', slice=20,
+                      croplattop=None, croplatbottom=None):
         
-        cube = self.exposure[key][0,:,croplattop:croplatbottom,:].data
+        cube = self.exposure[key][0, :, croplattop:croplatbottom, :].data
         wcs = self.get_wcs()[6]
         ax = plt.subplot(projection=wcs, slices=('x', 'y', 20, 1))
         im = ax.imshow((cube[slice, :, :])**(1/2.2), aspect=1/4, cmap='gist_heat', vmin=0)
@@ -164,14 +164,14 @@ class Sprout_ML:
         date = datetime_str[:8]  
         time = datetime_str[9:] 
         plt.title(f"{date[:4]}-{date[4:6]}-{date[6:]} T {time[:2]}:{time[2:4]}:{time[4:]}")
-        #plt.show()
+        # plt.show()
 
     def get_file_info(self):
         '''Get info from the header of the file'''
         hdul = fits.open(self.filename)
         print(hdul.info(),'\n----------------------------------------')
         rast = self.get_rasters()[0]
-        print(rast,'\n----------------------------------------')
+        print(rast, '\n----------------------------------------')
         print(rast.wcs)
         hdul.close()
 
