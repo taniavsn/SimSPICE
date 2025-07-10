@@ -86,6 +86,9 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
         wvl_array = row['wvl'].values
         mask = row['mask'].values
 
+        if self.log_space:
+            spectrum = np.log10(spectrum)
+
         ## initialize the augmentation : return either the original spectrum and 1 augmentation, or 2 augmentations (of a single item) 
         if self.augmentation_type is None: 
             return torch.Tensor(spectrum)[None, :] #adds 1 extra dimension (channels) 
