@@ -83,11 +83,10 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
         row = self.all_spectra.isel(index=index)
 
         spectrum = row['flux'].values
-        wvl_array = row['wvl'].values
-        mask = row['mask'].values
-
+        # wvl_array = row['wvl'].values
+        # mask = row['mask'].values
         if self.log_space:
-            spectrum = np.log10(spectrum)
+            spectrum = np.nan_to_num(np.log10(spectrum), nan=0, posinf=0, neginf=0)
 
         ## initialize the augmentation : return either the original spectrum and 1 augmentation, or 2 augmentations (of a single item) 
         if self.augmentation_type is None: 
