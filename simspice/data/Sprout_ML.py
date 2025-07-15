@@ -101,11 +101,9 @@ class Sprout_ML:
     def get_exposure(self, filename):
         '''Open the file and get the data'''
         return read_spice_l2_fits(filename, memmap=False)
-
-    
+ 
     def get_keys(self):
         '''Prints the different windows of the Sprout file'''
-        #print(list(self.exposure.keys()))
         return list(self.exposure.keys())
     
     def get_nbr_keys(self):
@@ -133,7 +131,8 @@ class Sprout_ML:
         '''Returns a list of the actual numerical data of the rasters present in the file in W/m**2/nm/str'''
         cubes = []
         for key in self.get_keys():
-            cubes.append(np.nan_to_num(self.exposure[key][0,:,croplattop:croplatbottom,:].data))  # indexation starts at the top
+            # indexation starts at the top therefore top to bottom
+            cubes.append(np.nan_to_num(self.exposure[key][0, :, croplattop:croplatbottom, :].data)) 
         return cubes
     
     def get_cubes_uncropped(self):
@@ -143,12 +142,14 @@ class Sprout_ML:
             cubes.append(np.nan_to_num(self.exposure[key][0,:,:,:].data))
         return cubes
     
-    def whatsgoingon(self, key='Ne VIII 770 (Merged)', slice=20, croplattop=None, croplatbottom=None):
+    def whatsgoingon(self, key='Ne VIII 770 (Merged)', slice=20, 
+                     croplattop=None, croplatbottom=None):
         
-        cube = self.exposure[key][0,:,croplattop:croplatbottom,:].data
+        cube = self.exposure[key][0, :, croplattop:croplatbottom, :].data
         wcs = self.get_wcs()[6]
         ax = plt.subplot(projection=wcs, slices=('x', 'y', 20, 1))
-        im = ax.imshow((cube[slice, :, :])**(1/2.2), aspect=1/4, cmap='gist_heat', vmin=0)
+        im = ax.imshow((cube[slice, :, :])**(1/2.2), aspect=1/4, 
+                       cmap='gist_heat', vmin=0)
         plt.colorbar(im, ax=ax)
         
         # Remove axis labels and ticks for the "Time" axis
