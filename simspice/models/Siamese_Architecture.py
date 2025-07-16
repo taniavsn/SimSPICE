@@ -19,7 +19,7 @@ class Siamese1DNet_backbone(nn.Module):
         self.pool = nn.MaxPool1d(kernel_size=2)
         
         # Fully connected layers for embeddings
-        self.fc1 = nn.Linear(7168, output_dim)  # keep the backbone complex enough
+        self.fc1 = nn.LazyLinear(output_dim)  # adapts to sample shape
     
     def forward(self, x):
         x = self.pool(F.relu(self.bn1(self.conv1(x)))) #
@@ -93,7 +93,7 @@ def run_model(checkpoint, dataset):
     loaded_model.eval()
     outputs = []
     with torch.no_grad():  # Disable gradient computation for inference
-        for i in tqdm.tqdm(range (dataset.__len__())):
+        for i in tqdm.tqdm(range(dataset.__len__())):
             spec = dataset.__getitem__(i).unsqueeze(0)
             # Move tensor to the same device as the model
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
