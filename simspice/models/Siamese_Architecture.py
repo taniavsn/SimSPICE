@@ -19,7 +19,7 @@ class Siamese1DNet_backbone(nn.Module):
         self.pool = nn.MaxPool1d(kernel_size=2)
         
         # Fully connected layers for embeddings
-        self.fc1 = nn.Linear(7168, output_dim)  # keep the backbone complex enough
+        self.fc1 = nn.LazyLinear(output_dim)  # keep the backbone complex enough
     
     def forward(self, x):
         x = self.pool(F.relu(self.bn1(self.conv1(x)))) #
