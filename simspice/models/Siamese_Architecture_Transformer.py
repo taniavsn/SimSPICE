@@ -9,42 +9,44 @@ from lightly.loss import NTXentLoss  # type: ignore
 
 
 class Transformer1DBackbone(nn.Module):
-    def __init__(self, input_length=512, d_model=64, nhead=4, 
+    def __init__(self, max_length=512, d_model=64, nhead=4,
                  num_layers=3, output_dim=128):
         super(Transformer1DBackbone, self).__init__()
         
-        self.input_length = input_length
-        self.d_model = d_model   
-
-        # Linear projection of input to d_model dimension
+        self.d_model = d_model
         self.input_proj = nn.Linear(1, d_model)
 
-        # Positional Encoding
-        self.pos_encoding = nn.Parameter(torch.randn(input_length, d_model))
+        # Create max_length positional encoding
+        self.pos_encoding = nn.Parameter(torch.randn(max_length, d_model))
 
-        # Transformer encoder
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=nhead,
             dim_feedforward=128,
             dropout=0.1,
-            batch_first=True  # Use batch_first for (B, L, D) input
+            batch_first=True
         )
-        self.transformer = nn.TransformerEncoder(encoder_layer, 
+        self.transformer = nn.TransformerEncoder(encoder_layer,
                                                  num_layers=num_layers)
 
-        # Pooling + fully connected head
         self.pool = nn.AdaptiveAvgPool1d(1)
         self.fc = nn.Linear(d_model, output_dim)
 
     def forward(self, x):
         # x shape: (B, C=1, L)
-        x = x.permute(0, 2, 1)  # -> (B, L, C)
-        x = self.input_proj(x) + self.pos_encoding  # Add positional encoding
-        x = self.transformer(x)  # -> (B, L, D)
-        x = x.permute(0, 2, 1)  # -> (B, D, L)
-        x = self.pool(x).squeeze(-1)  # -> (B, D)
-        x = F.relu(self.fc(x))  # -> (B, output_dim)
+        x = x.permute(0, 2, 1)  # (B, L, C=1)
+
+        # Project input to d_model
+        x = self.input_proj(x)  # (B, L, D)
+
+        # Add positional encoding up to input length
+        pos_enc = self.pos_encoding[:x.size(1), :]  # (L, D)
+        x = x + pos_enc  # broadcasting (B, L, D) + (L, D)
+
+        x = self.transformer(x)  # (B, L, D)
+        x = x.permute(0, 2, 1)   # (B, D, L)
+        x = self.pool(x).squeeze(-1)  # (B, D)
+        x = F.relu(self.fc(x))  # (B, output_dim)
         return F.normalize(x, dim=1)
 
 
