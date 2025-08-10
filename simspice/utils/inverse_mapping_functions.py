@@ -74,7 +74,7 @@ WAVELENGTHS_ARRAY = [ 698.6 ,  698.79,  698.98,  699.17,  699.36,  699.55,  699.
        1036.13, 1036.32, 1036.51]
 
 SIZE_CROPPED_MAP = 116160
-SHAPE_CROPPED_MAP = (605,192)
+SHAPE_CROPPED_MAP = 605,192
 
 def plot_n_random_spectra_cluster(labels, stacked_outputs, chosen_cluster, dataset, nbr_items=5, plot_on_map=False, log_scale=True,
                                   dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc"):
@@ -117,8 +117,8 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster, datase
         
 
     plt.figure(figsize=[12,4], tight_layout=True)
-    plt.plot(WAVELENGTHS_ARRAY, np.nanmean(av_spectra, axis=0), label = 'mean spectrum')
-    plt.plot(WAVELENGTHS_ARRAY, np.nanmedian(av_spectra, axis=0), alpha=0.5, label = 'median spectrum')
+    plt.plot(WAVELENGTHS_ARRAY, np.nanmean(av_spectra, axis=0), label='mean spectrum')
+    plt.plot(WAVELENGTHS_ARRAY, np.nanmedian(av_spectra, axis=0), alpha=0.5, label='median spectrum')
     if log_scale:
         plt.yscale('log')
     plt.title(f'Cluster #{chosen_cluster}')
@@ -127,7 +127,9 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster, datase
     return av_spectra
 
 
-def map_clusters(labels, dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc", selected_clusters = None, max_ticks=10):
+def map_clusters(labels,
+                dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc",
+                selected_clusters=None, max_ticks=10):
     '''
     Maps the fits file according to the clusters determined by HDBscan
     '''
@@ -135,7 +137,7 @@ def map_clusters(labels, dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROU
     dataset = xr.open_dataset(dataset_path)
     nbr_files = int(len(dataset['index'])/SIZE_CROPPED_MAP)
     for x in range(nbr_files):
-        current_labels = labels[SIZE_CROPPED_MAP * x : SIZE_CROPPED_MAP * (x + 1)].reshapeSHAPE_CROPPED_MAP
+        current_labels = labels[SIZE_CROPPED_MAP * x: SIZE_CROPPED_MAP * (x + 1)].reshape(SHAPE_CROPPED_MAP)
         if selected_clusters is not None:
             masked_labels = np.where(np.isin(current_labels, selected_clusters), current_labels, np.nan)
         else:
@@ -143,9 +145,11 @@ def map_clusters(labels, dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROU
 
         unique_clusters = np.unique(current_labels[~np.isnan(current_labels)])
         cmap = get_cmap("cet_glasbey_bw", len(unique_clusters))
-        print("Unique Clusters:", unique_clusters)
+        print("Unique Clusters:", unique_clusters.size)
 
-        img = plt.imshow(masked_labels, cmap=cmap, vmin = int(np.nanmin(masked_labels)), vmax=int(np.nanmax(masked_labels)), aspect=1 / 4)
+        img = plt.imshow(masked_labels, cmap=cmap,
+                         vmin=int(np.nanmin(masked_labels)),
+                         vmax=int(np.nanmax(masked_labels)), aspect=1 / 4)
 
         datetime_str = str(dataset.isel(index=SIZE_CROPPED_MAP*x+10)['filename'].data).split('_')[3]
         date = datetime_str[:8]  
@@ -163,15 +167,18 @@ def map_clusters(labels, dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROU
         # plt.show()
 
 
-def map_item_map(item_nbr:int, dataset:str="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc",
-                 plot:bool=False, title:str=' ', nanquant=0.99,
-                 data_dir:str='C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\data_L2\\', 
-                 key:str='Ne VIII 770 (Merged)', croplatbottom:int=725, croplattop:int=120):
+def map_item_map(item_nbr: int,
+                 dataset: str = "C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc",
+                 plot: bool = False,
+                 title: str = ' ', nanquant=0.99,
+                 data_dir: str = 'C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\data_L2\\', 
+                 key: str = 'Ne VIII 770 (Merged)', 
+                 croplatbottom: int = 725, croplattop: int = 120):
     '''
     Maps an item from the dataset onto its corresponding solar map.
     item_nbr: the index of the wanted item.
     dataset: the path and filename of the dataset (.nc) desired.
-    data_dir: the location of SPICE's .fits files. 
+    data_dir: the location of SPICE's .fits files.
     '''
     dataset = xr.open_dataset(dataset)
     if isinstance(item_nbr, int):

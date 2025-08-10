@@ -3,8 +3,21 @@ __pycache__/
 *.py[codz]
 *$py.class
 
-# C extensions
+# Fodlers
+runs_double_augmentation/
+runs_single_augmentation/
+wandb/
+Outputs_clustering/
+jobs/
+data_L2/
 
+# Outputs
+*.npy
+*.png
+*.nc
+*.fits
+
+# C extensions
 *.so
 
 # Distribution / packaging

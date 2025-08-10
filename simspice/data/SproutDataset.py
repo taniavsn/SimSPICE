@@ -1,11 +1,17 @@
-from Augmentation import Augmentation
-from Sprout_ML import Sprout_ML
+import sys
+import os
+
+parent_dir = os.path.abspath(os.path.join(os.getcwd(), '..'))
+sys.path.append(parent_dir)
+
+from simspice.utils.Augmentation import Augmentation
+from simspice.data.Sprout_ML import Sprout_ML
 from torch.utils.data import Dataset
 import numpy as np
 import xarray as xr # type: ignore
 import pandas as pd
 import torch
-import os
+
 
 
 BATCH_SIZE = 32
@@ -14,12 +20,15 @@ BATCH_SIZE = 32
 
 class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
     
-    def __init__(self, csv_files: str='L2_names.csv', file_dir: str='C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\', 
-                 dataset_path = "C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc",
-                 batch_size: int=BATCH_SIZE, augmentation_type: str='single', log_space=False, 
-                 mu_doppler=0, sigma = 1, num_hits = 2,
+    def __init__(self, csv_files: str = 'L2_names.csv',
+                 file_dir: str = 'C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\datasets_deepL\\',
+                 dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc",
+                 batch_size: int = BATCH_SIZE, 
+                 augmentation_type: str = 'single', log_space=False, 
+                 mu_doppler=0, sigma=1, num_hits=2,
                  shift_range=(-0.4, 0.4), gain_range=(0.1, 3), 
-                 type_distrib_gain='Gaussian', type_distrib_shift='Gaussian', normalize_intensity=False):
+                 type_distrib_gain='Gaussian', type_distrib_shift='Gaussian', 
+                 normalize_intensity=False):
         '''
         file_dir (str): path to the folder containing the images
         augmentation (str): whether to just return the original spectrum (None)
@@ -55,17 +64,16 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
         self.type_distrib_gain = type_distrib_gain
         self.gain_range = gain_range
         
-
-    def __len__(self) -> int: # how many spectra do we have?
+    def __len__(self) -> int:  # how many spectra do we have?
         '''
         Length of the dataset
         '''
         return len(self.all_spectra['index'])
     
-
     def __getitem__(self, index):
         '''
-        returns two spectra, with a flag that makes it return two augmented spectra (based on an original) or the original and an augmented version.
+        returns two spectra, with a flag that makes it return two augmented 
+        spectra (based on an original) or the original and an augmented version.
         Args:
             idx (int): index of the spectrum to retrieve
         '''
@@ -77,10 +85,13 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
         row = self.all_spectra.isel(index=index)
 
         spectrum = row['flux'].values
-        wvl_array = row['wvl'].values
-        mask = row['mask'].values
+        # wvl_array = row['wvl'].values
+        # mask = row['mask'].values
+        if self.log_space:
+            spectrum = np.nan_to_num(np.log10(spectrum), nan=0, posinf=0, neginf=0)
 
-        ## initialize the augmentation : return either the original spectrum and 1 augmentation, or 2 augmentations (of a single item) 
+        ## initialize the augmentation : return either the original spectrum 
+        #  and 1 augmentation, or 2 augmentations (of a single item) 
         if self.augmentation_type is None: 
             return torch.Tensor(spectrum)[None, :] #adds 1 extra dimension (channels) 
 

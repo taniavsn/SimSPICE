@@ -14,7 +14,7 @@ class Augmentation():
                  mu_doppler=0, sigma = 1, num_hits = 2,
                  shift_range=(-0.4, 0.4), gain_range=(0.1, 3), 
                  type_distrib_gain='Gaussian', type_distrib_shift='Gaussian', 
-                 normalize_intensity=False, log_space=True): 
+                 normalize_intensity=False, log_space=False):
         '''
         mu_doppler: mean of distribution of the simulated doppler shift (should be 0)
         shift_range: range of doppler shift values
