@@ -7,7 +7,7 @@ import numpy as np
 import xarray as xr # type: ignore
 import colorcet as cc # type: ignore
 
-WAVELENGTHS_ARRAY = [ 698.6 ,  698.79,  698.98,  699.17,  699.36,  699.55,  699.74,
+WAVELENGTHS_ARRAY = [698.6 ,  698.79,  698.98,  699.17,  699.36,  699.55,  699.74,
         699.93,  700.12,  700.31,  700.5 ,  700.69,  700.88,  701.07,
         701.26,  701.45,  701.64,  701.83,  702.02,  702.21,  702.4 ,
         702.59,  702.78,  702.97,  703.16,  703.35,  703.54,  703.73,
@@ -77,7 +77,7 @@ SIZE_CROPPED_MAP = 116160
 SHAPE_CROPPED_MAP = 605,192
 
 def plot_n_random_spectra_cluster(labels, stacked_outputs, chosen_cluster, dataset, nbr_items=5, plot_on_map=False, log_scale=True,
-                                  dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc"):
+                                  dataset_path="spectra_train.nc"):
     '''
     Plots nbr_item belonging to a given cluster.
     dataset: SproutDataset object, with augmentation_type set to None.
@@ -101,8 +101,9 @@ def plot_n_random_spectra_cluster(labels, stacked_outputs, chosen_cluster, datas
             map_item_map(i, dataset_path)
 
 
-def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster, dataset, log_scale=True,
-                                  dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc"):
+def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster, 
+                                    dataset, log_scale=True,
+                                    dataset_path="spectra_train.nc"):
     '''
     Plots the average spectra of a given cluster. 
     dataset: SproutDataset object, with augmentation_type set to None.
@@ -115,10 +116,11 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster, datase
         item = dataset.__getitem__(i)
         av_spectra.append(item[0].squeeze())
         
-
     plt.figure(figsize=[12,4], tight_layout=True)
-    plt.plot(WAVELENGTHS_ARRAY, np.nanmean(av_spectra, axis=0), label='mean spectrum')
-    plt.plot(WAVELENGTHS_ARRAY, np.nanmedian(av_spectra, axis=0), alpha=0.5, label='median spectrum')
+    plt.plot(WAVELENGTHS_ARRAY, np.nanmean(av_spectra, axis=0),
+              label='mean spectrum')
+    plt.plot(WAVELENGTHS_ARRAY, np.nanmedian(av_spectra, axis=0),
+             alpha=0.5, label='median spectrum')
     if log_scale:
         plt.yscale('log')
     plt.title(f'Cluster #{chosen_cluster}')
@@ -128,7 +130,7 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster, datase
 
 
 def map_clusters(labels,
-                dataset_path="C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc",
+                dataset_path="spectra_train.nc",
                 selected_clusters=None, max_ticks=10):
     '''
     Maps the fits file according to the clusters determined by HDBscan
@@ -168,11 +170,11 @@ def map_clusters(labels,
 
 
 def map_item_map(item_nbr: int,
-                 dataset: str = "C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\spectra_train.nc",
+                 dataset: str = "spectra_train.nc",
                  plot: bool = False,
                  title: str = ' ', nanquant=0.99,
-                 data_dir: str = 'C:\\Users\\tania\\Documents\\SPICE\\SPROUTS\\data_L2\\', 
-                 key: str = 'Ne VIII 770 (Merged)', 
+                 data_dir: str = 'data_L2\\', 
+                 key: str = 'Ne VIII 770 (Merged)',
                  croplatbottom: int = 725, croplattop: int = 120):
     '''
     Maps an item from the dataset onto its corresponding solar map.
@@ -186,13 +188,15 @@ def map_item_map(item_nbr: int,
         print(filename)
         
         exposure = read_spice_l2_fits(data_dir+filename, memmap=False)
-        cube = exposure[key][0,:,croplattop:croplatbottom,:].data
-        plt.imshow(cube[20, :, :], aspect=1/4, cmap='gist_heat', vmax=np.nanquantile(cube[20, :, :], nanquant))
+        cube = exposure[key][0, :, croplattop:croplatbottom, :].data
+        plt.imshow(cube[20, :, :], aspect=1/4, cmap='gist_heat', 
+                   vmax=np.nanquantile(cube[20, :, :], nanquant))
         plt.colorbar()
         print(cube.shape)
         if plot:
-            i,j = (dataset.isel(index=item_nbr)['x-index'].data, dataset.isel(index=item_nbr)['y-index'].data)
-            plt.plot(j,i, color='red', marker='+', label=str(item_nbr))
+            i, j = (dataset.isel(index=item_nbr)['x-index'].data,
+                   dataset.isel(index=item_nbr)['y-index'].data)
+            plt.plot(j, i, color='red', marker='+', label=str(item_nbr))
 
     else:
         filenames = str(dataset.isel(index=item_nbr)['filename'].data)
@@ -201,11 +205,11 @@ def map_item_map(item_nbr: int,
             x=0 
             try:
                 for item_nbr in item_nbr: 
-                    filename=filenames[x]
+                    filename = filenames[x]
                     i_s = [dataset.isel(index=item_nbr)['x-index'].data for item_nbr in item_nbr]
                     j_s = [dataset.isel(index=item_nbr)['y-index'].data for item_nbr in item_nbr]
                     exposure = read_spice_l2_fits(data_dir+filename, memmap=False)
-                    cube = exposure[key][0,:,croplattop:croplatbottom,:].data
+                    cube = exposure[key][0, :, croplattop:croplatbottom, :].data
                     plt.imshow(cube[20, :, :], aspect=1/4, cmap='gist_heat', vmax=np.nanquantile(cube[20, :, :], nanquant))
                     plt.colorbar()
                     print(cube.shape)
@@ -214,7 +218,6 @@ def map_item_map(item_nbr: int,
                             plt.plot(j,i, color='red', marker='+', label=str(item_nbr))
             except:
                 x+=1
-
 
     if title:
         plt.title(title)
