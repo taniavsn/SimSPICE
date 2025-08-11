@@ -11,28 +11,34 @@ warnings.filterwarnings("ignore")
 
 class Sprout_ML:
     ''' 
-    The SPROUTS data consist of a file with 8 windows: 'O III 703 / Mg IX 706 (Merged)', 'O II 718 - Peak (spectral bin 2)', 'S IV 750/ Mg IX (spectral bin 2)', 'Ne VIII 770 (Merged)', 
-    'S V 786 / O IV 787 (Merged)', 'Ly-gamma-CIII group (Merged)', 'N III 991 (Merged)' and 'O VI 1032 (Merged)'
+    The SPROUTS data consist of a file with 8 windows: 
+    'O III 703 / Mg IX 706 (Merged)',
+    'O II 718 - Peak (spectral bin 2)', 'S IV 750/ Mg IX (spectral bin 2)',
+    'Ne VIII 770 (Merged)', 
+    'S V 786 / O IV 787 (Merged)', 'Ly-gamma-CIII group (Merged)',
+    'N III 991 (Merged)' and 'O VI 1032 (Merged)'
 
-    Each of those windows is a 'raster', i.e. a 3D data cube with 2 spatial dimensions and 1 spectral dimension (we disregard the time dimension). 
+    Each of those windows is a 'raster', i.e. a 3D data cube with 2 spatial 
+    dimensions and 1 spectral dimension (we disregard the time dimension). 
     In other words, each raster is a 2D image where each pixel is a spectrum.
     '''
-    #min and max peak half width (sigma)
-    MIN_WIDTH = 0.2 #Angstrom
-    MAX_WIDTH = 0.8 #Angstrom # prev:2
-    LINES = ['O III 702', 'O III 703', 'Mg IX 706', 'O II 718', 'Mg IX 749', 'S IV 750','Ne VIII 770', 'Mg VIII 772', 
-        'S V 786', 'O IV 787', 'O IV 790', 'Ly-gamma 972', 'C III 977', 'O I / Na VI', 'N III 989', 'N III 991', 'O VI 1032']
+    # min and max peak half width (sigma)
+    MIN_WIDTH = 0.2  # Angstrom
+    MAX_WIDTH = 0.8  # Angstrom # prev:2
+    LINES = ['O III 702', 'O III 703', 'Mg IX 706', 'O II 718', 'Mg IX 749',
+              'S IV 750','Ne VIII 770', 'Mg VIII 772', 'S V 786', 'O IV 787',
+              'O IV 790', 'Ly-gamma 972', 'C III 977', 'O I / Na VI',
+              'N III 989', 'N III 991', 'O VI 1032']
 
     SIZE_CROPPED_MAP = 116160
-    SHAPE_CROPPED_MAP = (605,192)
-
+    SHAPE_CROPPED_MAP = (605, 192)
 
     def __init__(self, dir, filename, padding_size=10):
-        self.filename = os.path.join(dir,filename)
+        self.filename = os.path.join(dir, filename)
         self.fitsfile = filename
         self.exposure = self.get_exposure(dir+filename)
         self.padding_size = padding_size
-        self.common_wvl = np.array([ 698.6 ,  698.79,  698.98,  699.17,  699.36,  699.55,  699.74,
+        self.common_wvl = np.array([698.6 ,  698.79,  698.98,  699.17,  699.36,  699.55,  699.74,
         699.93,  700.12,  700.31,  700.5 ,  700.69,  700.88,  701.07,
         701.26,  701.45,  701.64,  701.83,  702.02,  702.21,  702.4 ,
         702.59,  702.78,  702.97,  703.16,  703.35,  703.54,  703.73,
