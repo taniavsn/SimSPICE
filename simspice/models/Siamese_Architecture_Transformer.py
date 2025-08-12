@@ -58,7 +58,7 @@ class SimSiam(pl.LightningModule):
     - hidden_layer_dim (int): Dimension of the hidden layer.
     """
 
-    def __init__(self, output_dim=64, backbone_output_dim=128, 
+    def __init__(self, output_dim=64, backbone_output_dim=128,
                  hidden_layer_dim=128):
         super().__init__()
         self.backbone = Transformer1DBackbone(output_dim=backbone_output_dim)
