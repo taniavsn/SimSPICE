@@ -36,7 +36,7 @@ class SimSiam(pl.LightningModule):
     - backbone_output_dim (int): Dimension of the backbone's output.
     - hidden_layer_dim (int): Dimension of the hidden layer.
     """
-    def __init__(self, output_dim=64, backbone_output_dim=128, hidden_layer_dim=128):
+    def __init__(self, output_dim=32, backbone_output_dim=128, hidden_layer_dim=128):
         super().__init__()
         self.backbone = Siamese1DNet_backbone(output_dim=backbone_output_dim)
 
@@ -45,7 +45,7 @@ class SimSiam(pl.LightningModule):
 
         # prediction head: produce the final output from the learned features
         self.prediction_head = SimSiamPredictionHead(output_dim, hidden_layer_dim, output_dim)
-        self.criterion =  NTXentLoss(temperature=0.07)
+        self.criterion = NTXentLoss(temperature=0.07)
 
     def forward(self, x):
         f = self.backbone(x)

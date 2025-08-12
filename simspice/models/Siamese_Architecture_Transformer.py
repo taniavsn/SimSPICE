@@ -47,7 +47,7 @@ class Transformer1DBackbone(nn.Module):
         x = x.permute(0, 2, 1)   # (B, D, L)
         x = self.pool(x).squeeze(-1)  # (B, D)
         x = F.relu(self.fc(x))  # (B, output_dim)
-        return F.normalize(x, dim=1)
+        return F.normalize(x, dim=1, eps=1e-8)
 
 
 class SimSiam(pl.LightningModule):
