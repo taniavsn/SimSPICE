@@ -77,19 +77,26 @@ class SimSiam(pl.LightningModule):
 
     def forward(self, x):
         f = self.backbone(x)
-        z = self.projection_head(
-            f
-        )  # z are the embeddings, meaning the data represented 
-        # in a lower dimension space.
+        # z are the embeddings, meaning the data represented
+        #  in a lower dimension space.
+        z = self.projection_head(f)
         p = self.prediction_head(z)
         return z, p
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         (x0, x1) = batch
 
-        z0, p0 = self.forward(x0)
+        # Forward both views
+        z0, p0 = self.forward(x0)  # z0: projection, p0: prediction
         z1, p1 = self.forward(x1)
-        loss = self.criterion(z0, z1)
+
+        # Stop-gradient: prevent gradient from flowing into z1 when 
+        # comparing p0→z1, and vice versa
+        loss = 0.5 * (
+            self.criterion(p0, z1.detach()) +
+            self.criterion(p1, z0.detach())
+        )
+
         self.log("train_loss", loss, on_step=True, on_epoch=True)
         return loss
 

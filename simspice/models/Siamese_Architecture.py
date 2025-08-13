@@ -40,30 +40,38 @@ class SimSiam(pl.LightningModule):
         super().__init__()
         self.backbone = Siamese1DNet_backbone(output_dim=backbone_output_dim)
 
-        # projection head: map data representations into a space that facilitates comparison and learning
-        self.projection_head = SimSiamProjectionHead(backbone_output_dim, hidden_layer_dim, output_dim) 
+        # projection head: map data representations into a space
+        #  that facilitates comparison and learning
+        self.projection_head = SimSiamProjectionHead(backbone_output_dim,
+                                                      hidden_layer_dim, output_dim) 
 
         # prediction head: produce the final output from the learned features
-        self.prediction_head = SimSiamPredictionHead(output_dim, hidden_layer_dim, output_dim)
+        self.prediction_head = SimSiamPredictionHead(output_dim,
+                                                      hidden_layer_dim, output_dim)
         self.criterion = NTXentLoss(temperature=0.07)
 
     def forward(self, x):
         f = self.backbone(x)
-        z = self.projection_head(f)  # z are the embeddings, meaning the data represented in a lower dimension space.
+        # z are the embeddings, meaning the data represented
+        #  in a lower dimension space.
+        z = self.projection_head(f)
         p = self.prediction_head(z)
         return z, p
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch):
         (x0, x1) = batch
-        # print('\n', x0.shape, x1.shape)
 
-        #### Wrap loss function? loss_fn would be self.criterion
-        # loss_fn = NTXentLoss()
-        # loss_fn = SelfSupervisedLoss(loss_fn)
-        # loss = loss_fn(z0,z1)
-        z0, p0 = self.forward(x0)
+        # Forward both views
+        z0, p0 = self.forward(x0)  # z0: projection, p0: prediction
         z1, p1 = self.forward(x1)
-        loss = self.criterion(z0, z1)
+
+        # Stop-gradient: prevent gradient from flowing into z1 when 
+        # comparing p0→z1, and vice versa
+        loss = 0.5 * (
+            self.criterion(p0, z1.detach()) +
+            self.criterion(p1, z0.detach())
+        )
+
         self.log("train_loss", loss, on_step=True, on_epoch=True)
         return loss
 
