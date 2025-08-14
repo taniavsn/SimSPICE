@@ -101,7 +101,7 @@ def run_model(checkpoint, dataset):
     loaded_model.eval()
     outputs = []
     with torch.no_grad():  # Disable gradient computation for inference
-        for i in tqdm.tqdm(range (dataset.__len__())):
+        for i in tqdm.tqdm(range(dataset.__len__())):
             spec = dataset.__getitem__(i).unsqueeze(0)
             # Move tensor to the same device as the model
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
