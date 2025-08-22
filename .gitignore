@@ -16,6 +16,7 @@ data_L2/
 *.png
 *.nc
 *.fits
+*.ckpt
 
 # C extensions
 *.so
