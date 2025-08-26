@@ -137,7 +137,7 @@ class SimSiam(pl.LightningModule):
     def __init__(self, output_dim=64, backbone_output_dim=128, 
                  hidden_layer_dim=128):
         super().__init__()
-        self.backbone = ResNet18_1D(output_dim=backbone_output_dim)
+        self.backbone = ResNet50_1D(output_dim=backbone_output_dim)
         self.projection_head = SimSiamProjectionHead(
             backbone_output_dim, hidden_layer_dim, output_dim
         )

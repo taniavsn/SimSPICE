@@ -3,6 +3,7 @@ from sunraster.instr.spice import read_spice_l2_fits # type: ignore
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
 import matplotlib.colors as mcolors
+from matplotlib.colors import Normalize
 import numpy as np
 import xarray as xr # type: ignore
 import colorcet as cc # type: ignore
@@ -130,43 +131,50 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster,
 
 
 def map_clusters(labels,
-                dataset_path="spectra_train.nc",
-                selected_clusters=None, max_ticks=10):
+                 dataset_path="spectra_train.nc",
+                 selected_clusters=None, max_ticks=10):
     '''
     Maps the fits file according to the clusters determined by HDBscan
+    selected_clusters: list
     '''
     import xarray as xr
     dataset = xr.open_dataset(dataset_path)
+
+    # --- Build consistent colormap across all clusters ---
+    all_clusters = np.unique(labels[~np.isnan(labels)])
+    cmap = get_cmap("cet_glasbey_bw", len(all_clusters))
+    norm = Normalize(vmin=int(all_clusters.min()), vmax=int(all_clusters.max()))
+
     nbr_files = int(len(dataset['index'])/SIZE_CROPPED_MAP)
     for x in range(nbr_files):
         current_labels = labels[SIZE_CROPPED_MAP * x: SIZE_CROPPED_MAP * (x + 1)].reshape(SHAPE_CROPPED_MAP)
+
         if selected_clusters is not None:
             masked_labels = np.where(np.isin(current_labels, selected_clusters), current_labels, np.nan)
         else:
             masked_labels = current_labels
 
         unique_clusters = np.unique(current_labels[~np.isnan(current_labels)])
-        cmap = get_cmap("cet_glasbey_bw", len(unique_clusters))
-        print("Unique Clusters:", unique_clusters.size)
+        print("Unique Clusters in file:", unique_clusters.size)
 
-        img = plt.imshow(masked_labels, cmap=cmap,
-                         vmin=int(np.nanmin(masked_labels)),
-                         vmax=int(np.nanmax(masked_labels)), aspect=1 / 4)
+        # Use the global colormap + normalization
+        img = plt.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1/4)
 
         datetime_str = str(dataset.isel(index=SIZE_CROPPED_MAP*x+10)['filename'].data).split('_')[3]
         date = datetime_str[:8]  
         time = datetime_str[9:] 
         plt.title(f"{date[:4]}-{date[4:6]}-{date[6:]} T {time[:2]}:{time[2:4]}:{time[4:]}")
 
+        # Colorbar ticks
         if len(unique_clusters) > max_ticks:
             tick_indices = np.linspace(0, len(unique_clusters) - 1, max_ticks, dtype=int)
             tick_labels = unique_clusters[tick_indices]
         else:
             tick_labels = unique_clusters
+
         cbar = plt.colorbar(img, ticks=tick_labels)
         cbar.ax.set_yticklabels(tick_labels.astype(int))
 
-        # plt.show()
 
 
 def map_item_map(item_nbr: int,
