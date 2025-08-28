@@ -7,6 +7,7 @@ from matplotlib.colors import Normalize
 import numpy as np
 import xarray as xr # type: ignore
 import colorcet as cc # type: ignore
+from skimage import measure
 
 WAVELENGTHS_ARRAY = [698.6 ,  698.79,  698.98,  699.17,  699.36,  699.55,  699.74,
         699.93,  700.12,  700.31,  700.5 ,  700.69,  700.88,  701.07,
@@ -74,6 +75,13 @@ WAVELENGTHS_ARRAY = [698.6 ,  698.79,  698.98,  699.17,  699.36,  699.55,  699.7
        1034.8 , 1034.99, 1035.18, 1035.37, 1035.56, 1035.75, 1035.94,
        1036.13, 1036.32, 1036.51]
 
+WAVELENGTHS_ARRAY_NEMG = [766.6 , 766.79,  766.98,  767.17,  
+                          767.36,  767.55,  767.74,  767.93,
+                            768.12,  768.31,  768.5 ,  768.69,  768.88,  769.07,  769.26,
+                            769.45,  769.64,  769.83,  770.02,  770.21,  770.4 ,  770.59,
+                            770.78,  770.97,  771.16,  771.35,  771.54,  771.73,  771.92,
+                            772.11,  772.3 ,  772.49,  772.68,  772.87,  773.06,  773.25,
+                            773.44,  773.63,  773.82,  774.01]
 SIZE_CROPPED_MAP = 116160
 SHAPE_CROPPED_MAP = 605,192
 
@@ -104,7 +112,8 @@ def plot_n_random_spectra_cluster(labels, stacked_outputs, chosen_cluster, datas
 
 def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster, 
                                     dataset, log_scale=True,
-                                    dataset_path="spectra_train.nc"):
+                                    dataset_path="spectra_train.nc", 
+                                    wvl=WAVELENGTHS_ARRAY):
     '''
     Plots the average spectra of a given cluster. 
     dataset: SproutDataset object, with augmentation_type set to None.
@@ -117,63 +126,149 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster,
         item = dataset.__getitem__(i)
         av_spectra.append(item[0].squeeze())
         
-    plt.figure(figsize=[12,4], tight_layout=True)
-    plt.plot(WAVELENGTHS_ARRAY, np.nanmean(av_spectra, axis=0),
+    # plt.figure(figsize=[12,4], tight_layout=True)
+    plt.plot(wvl, np.nanmean(av_spectra, axis=0),
               label='mean spectrum')
-    plt.plot(WAVELENGTHS_ARRAY, np.nanmedian(av_spectra, axis=0),
+    plt.plot(wvl, np.nanmedian(av_spectra, axis=0),
              alpha=0.5, label='median spectrum')
     if log_scale:
         plt.yscale('log')
     plt.title(f'Cluster #{chosen_cluster}')
     plt.legend()
-    plt.show()
+    
     return av_spectra
 
 
-def map_clusters(labels,
-                 dataset_path="spectra_train.nc",
-                 selected_clusters=None, max_ticks=10):
-    '''
-    Maps the fits file according to the clusters determined by HDBscan
-    selected_clusters: list
-    '''
+def map_clusters(labels, dataset_path="spectra_train.nc", ax=None,
+                 data_dir='data_L2\\', selected_clusters=None, 
+                 max_ticks=10, contour=False,
+                 croplatbottom=725, croplattop=120,
+                 key='Ne VIII 770 (Merged)', linewidth=1,
+                 file_index=0, cmap=None, norm=None):
     import xarray as xr
     dataset = xr.open_dataset(dataset_path)
 
     # --- Build consistent colormap across all clusters ---
     all_clusters = np.unique(labels[~np.isnan(labels)])
-    cmap = get_cmap("cet_glasbey_bw", len(all_clusters))
-    norm = Normalize(vmin=int(all_clusters.min()), vmax=int(all_clusters.max()))
+    if cmap is None or norm is None:
+        cmap = get_cmap("cet_glasbey_bw", len(all_clusters))
+        norm = Normalize(vmin=int(all_clusters.min()), vmax=int(all_clusters.max()))
 
-    nbr_files = int(len(dataset['index'])/SIZE_CROPPED_MAP)
-    for x in range(nbr_files):
-        current_labels = labels[SIZE_CROPPED_MAP * x: SIZE_CROPPED_MAP * (x + 1)].reshape(SHAPE_CROPPED_MAP)
+    if ax is None:
+        fig, ax = plt.subplots()
 
-        if selected_clusters is not None:
-            masked_labels = np.where(np.isin(current_labels, selected_clusters), current_labels, np.nan)
-        else:
-            masked_labels = current_labels
+    # --- Extract the correct file ---
+    current_labels = labels[SIZE_CROPPED_MAP * file_index : SIZE_CROPPED_MAP * (file_index + 1)]
+    current_labels = current_labels.reshape(SHAPE_CROPPED_MAP)
 
-        unique_clusters = np.unique(current_labels[~np.isnan(current_labels)])
-        print("Unique Clusters in file:", unique_clusters.size)
+    if selected_clusters is not None:
+        masked_labels = np.where(np.isin(current_labels, selected_clusters), current_labels, np.nan)
+    else:
+        masked_labels = current_labels
 
-        # Use the global colormap + normalization
-        img = plt.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1/4)
+    unique_clusters = np.unique(current_labels[~np.isnan(current_labels)])
 
-        datetime_str = str(dataset.isel(index=SIZE_CROPPED_MAP*x+10)['filename'].data).split('_')[3]
-        date = datetime_str[:8]  
-        time = datetime_str[9:] 
-        plt.title(f"{date[:4]}-{date[4:6]}-{date[6:]} T {time[:2]}:{time[2:4]}:{time[4:]}")
+    # Plot into the axis
+    img = ax.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1/4)
 
-        # Colorbar ticks
-        if len(unique_clusters) > max_ticks:
-            tick_indices = np.linspace(0, len(unique_clusters) - 1, max_ticks, dtype=int)
-            tick_labels = unique_clusters[tick_indices]
-        else:
-            tick_labels = unique_clusters
+    if contour:
+        filename = str(dataset.isel(index=300)['filename'].data)
+        exposure = read_spice_l2_fits(data_dir+filename, memmap=False)
+        cube = exposure[key][0, :, croplattop:croplatbottom, :].data
+        ax.imshow(cube[20, :, :], aspect=1/4, cmap='gist_heat',
+                  vmax=np.nanquantile(cube[20, :, :], 0.99))
+        
+        for cluster_id in np.unique(masked_labels[~np.isnan(masked_labels)]):
+            binary_mask = (masked_labels == cluster_id)
+            contours = measure.find_contours(binary_mask, 0.5)
+            cluster_color = cmap(norm(cluster_id))
+            for contour in contours:
+                ax.plot(contour[:, 1], contour[:, 0], color=cluster_color, linewidth=linewidth)
 
-        cbar = plt.colorbar(img, ticks=tick_labels)
-        cbar.ax.set_yticklabels(tick_labels.astype(int))
+    datetime_str = str(dataset.isel(index=SIZE_CROPPED_MAP*file_index+10)['filename'].data).split('_')[3]
+    date = datetime_str[:8]  
+    time = datetime_str[9:] 
+    ax.set_title(f"{date[:4]}-{date[4:6]}-{date[6:]} T {time[:2]}:{time[2:4]}:{time[4:]}", fontsize=10)
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    return img, cmap, norm
+
+
+
+
+
+
+# def map_clusters(labels,
+#                  dataset_path="spectra_train.nc",
+#                  data_dir: str = 'data_L2\\', show=True,
+#                  return_images=True,
+#                  selected_clusters=None, max_ticks=10, contour=False,
+#                  croplatbottom: int = 725, croplattop: int = 120,
+#                  key: str = 'Ne VIII 770 (Merged)', linewidth=1):
+#     '''
+#     Maps the fits file according to the clusters determined by HDBscan
+#     selected_clusters: list
+#     '''
+    
+#     dataset = xr.open_dataset(dataset_path)
+
+#     # --- Build consistent colormap across all clusters ---
+#     all_clusters = np.unique(labels[~np.isnan(labels)])
+#     cmap = get_cmap("cet_glasbey_bw", len(all_clusters))
+#     norm = Normalize(vmin=int(all_clusters.min()), vmax=int(all_clusters.max()))
+#     images = []
+#     nbr_files = int(len(dataset['index'])/SIZE_CROPPED_MAP)
+#     for x in range(nbr_files):
+#         current_labels = labels[SIZE_CROPPED_MAP * x: SIZE_CROPPED_MAP * (x + 1)].reshape(SHAPE_CROPPED_MAP)
+
+#         if selected_clusters is not None:
+#             masked_labels = np.where(np.isin(current_labels, selected_clusters), current_labels, np.nan)
+#         else:
+#             masked_labels = current_labels
+
+#         unique_clusters = np.unique(current_labels[~np.isnan(current_labels)])
+#         print("Unique Clusters in file:", unique_clusters.size)
+
+#         # Use the global colormap + normalization
+#         img = plt.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1/4)
+#         if return_images: 
+#             images.append(img)
+#         if contour:
+#             filename = str(dataset.isel(index=300)['filename'].data)
+#             print(filename)
+            
+#             exposure = read_spice_l2_fits(data_dir+filename, memmap=False)
+#             cube = exposure[key][0, :, croplattop:croplatbottom, :].data
+#             plt.imshow(cube[20, :, :], aspect=1/4, cmap='gist_heat',
+#                        vmax=np.nanquantile(cube[20, :, :], 0.99))
+            
+#             for cluster_id in np.unique(masked_labels[~np.isnan(masked_labels)]):
+#                 binary_mask = (masked_labels == cluster_id)
+#                 contours = measure.find_contours(binary_mask, 0.5)  # threshold at 0.5
+#                 cluster_color = cmap(norm(cluster_id))
+#                 for contour in contours:
+#                     plt.plot(contour[:, 1], contour[:, 0], color=cluster_color, linewidth=linewidth)
+
+#         datetime_str = str(dataset.isel(index=SIZE_CROPPED_MAP*x+10)['filename'].data).split('_')[3]
+#         date = datetime_str[:8]  
+#         time = datetime_str[9:] 
+#         plt.title(f"{date[:4]}-{date[4:6]}-{date[6:]} T {time[:2]}:{time[2:4]}:{time[4:]}")
+
+#         # Colorbar ticks
+#         if len(unique_clusters) > max_ticks:
+#             tick_indices = np.linspace(0, len(unique_clusters) - 1, max_ticks, dtype=int)
+#             tick_labels = unique_clusters[tick_indices]
+#         else:
+#             tick_labels = unique_clusters
+
+#         cbar = plt.colorbar(img, ticks=tick_labels)
+#         cbar.ax.set_yticklabels(tick_labels.astype(int))
+#         if show:
+#             plt.show()
+#     if return_images: 
+#         return images
 
 
 
