@@ -13,7 +13,8 @@ class Augmentation():
     def __init__(self, 
                  mu_doppler=0, sigma = 1, num_hits = 2,
                  shift_range=(-0.4, 0.4), gain_range=(0.1, 3), 
-                 type_distrib_gain='Gaussian', type_distrib_shift='Gaussian', 
+                 type_distrib_gain='Gaussian', type_distrib_shift='Gaussian',
+                 add_noise=False,
                  normalize_intensity=False, log_space=False):
         '''
         mu_doppler: mean of distribution of the simulated doppler shift (should be 0)
@@ -30,6 +31,7 @@ class Augmentation():
         '''
         self.normalize_intensity = normalize_intensity 
         self.log_space = log_space
+        self.add_noise = add_noise
 
         # GCR parameters
         self.num_hits = num_hits
@@ -164,7 +166,8 @@ class Augmentation():
                 spectrum['flux'].values = np.abs(np.nan_to_num(np.log(spectrum['flux'].values),nan=0, posinf=0, neginf=0))
         spectrum, mask = self.add_shift_spectrum(spectrum)
         spectrum = self.add_gain_spectrum(spectrum)
-        spectrum = self.add_photon_noise(spectrum)
+        if self.add_noise:
+            spectrum = self.add_photon_noise(spectrum)
         # spectrum = self.add_GCR_noise(spectrum)
         
         return spectrum, mask

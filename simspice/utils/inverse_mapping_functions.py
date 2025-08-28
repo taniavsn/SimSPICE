@@ -175,7 +175,7 @@ def map_clusters(labels, dataset_path="spectra_train.nc", ax=None,
         filename = str(dataset.isel(index=300)['filename'].data)
         exposure = read_spice_l2_fits(data_dir+filename, memmap=False)
         cube = exposure[key][0, :, croplattop:croplatbottom, :].data
-        ax.imshow(cube[20, :, :], aspect=1/4, cmap='gist_heat',
+        ax.imshow(cube[20, :, :], aspect=1/4, cmap='gist_gray',
                   vmax=np.nanquantile(cube[20, :, :], 0.99))
         
         for cluster_id in np.unique(masked_labels[~np.isnan(masked_labels)]):
