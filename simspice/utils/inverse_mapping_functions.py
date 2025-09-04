@@ -110,33 +110,38 @@ def plot_n_random_spectra_cluster(labels, stacked_outputs, chosen_cluster, datas
             map_item_map(i, dataset_path)
 
 
-def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster, 
-                                    dataset, log_scale=True,
-                                    dataset_path="spectra_train.nc", 
-                                    wvl=WAVELENGTHS_ARRAY):
-    '''
-    Plots the average spectra of a given cluster. 
+def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster,
+                                 dataset, log_scale=True,
+                                 dataset_path="spectra_train.nc", ax=None,
+                                 wvl=WAVELENGTHS_ARRAY, color='tab:blue', med=False):
+    """
+    Plots the average spectra of a given cluster.
     dataset: SproutDataset object, with augmentation_type set to None.
-    '''
-    labels_reshaped = labels.reshape(-1, 1)
-    print('labels shape: ', labels_reshaped.shape)
-    outputs_with_labels = np.hstack((stacked_outputs, labels_reshaped))
-    av_spectra = []
-    for i in range(len(np.where(labels==chosen_cluster)[0])):
-        item = dataset.__getitem__(i)
-        av_spectra.append(item[0].squeeze())
-        
-    # plt.figure(figsize=[12,4], tight_layout=True)
-    plt.plot(wvl, np.nanmean(av_spectra, axis=0),
-              label='mean spectrum')
-    plt.plot(wvl, np.nanmedian(av_spectra, axis=0),
-             alpha=0.5, label='median spectrum')
+    """
+    # get indices for this cluster
+    idx = np.where(labels == chosen_cluster)[0]
+    print(f"Cluster {chosen_cluster}: {len(idx)} samples")
+
+    # load only those spectra
+    av_spectra = [dataset[i][0].squeeze() for i in idx]  # list comprehension is faster than for loop
+
+    av_spectra = np.array(av_spectra)  # convert to ndarray once
+    mean_spec = np.nanmean(av_spectra, axis=0)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    ax.plot(wvl, mean_spec, color=color, label='mean spectrum')
+    if med:
+        ax.plot(wvl, np.nanmedian(av_spectra, axis=0),
+                alpha=0.5, label='median spectrum')
     if log_scale:
-        plt.yscale('log')
-    plt.title(f'Cluster #{chosen_cluster}')
-    plt.legend()
-    
+        ax.set_yscale('log')
+    ax.set_title(f'Cluster #{chosen_cluster}')
+    ax.legend()
+
     return av_spectra
+
 
 
 def map_clusters(labels, dataset_path="spectra_train.nc", ax=None,
@@ -172,7 +177,7 @@ def map_clusters(labels, dataset_path="spectra_train.nc", ax=None,
     img = ax.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1/4)
 
     if contour:
-        filename = str(dataset.isel(index=300)['filename'].data)
+        filename = str(dataset.isel(index=300+SIZE_CROPPED_MAP*file_index)['filename'].data)
         exposure = read_spice_l2_fits(data_dir+filename, memmap=False)
         cube = exposure[key][0, :, croplattop:croplatbottom, :].data
         ax.imshow(cube[20, :, :], aspect=1/4, cmap='gist_gray',
@@ -190,8 +195,7 @@ def map_clusters(labels, dataset_path="spectra_train.nc", ax=None,
     time = datetime_str[9:] 
     ax.set_title(f"{date[:4]}-{date[4:6]}-{date[6:]} T {time[:2]}:{time[2:4]}:{time[4:]}", fontsize=10)
 
-    ax.set_xticks([])
-    ax.set_yticks([])
+
 
     return img, cmap, norm
 
