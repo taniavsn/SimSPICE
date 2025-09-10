@@ -109,7 +109,6 @@ def plot_n_random_spectra_cluster(labels, stacked_outputs, chosen_cluster, datas
         for i in random_spectra_idx:
             map_item_map(i, dataset_path)
 
-
 def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster,
                                  dataset, log_scale=True,
                                  dataset_path="spectra_train.nc", ax=None,
@@ -123,15 +122,17 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster,
     print(f"Cluster {chosen_cluster}: {len(idx)} samples")
 
     # load only those spectra
-    av_spectra = [dataset[i][0].squeeze() for i in idx]  # list comprehension is faster than for loop
+    av_spectra = [dataset.__getitem__(i)[0].squeeze() for i in idx]  # list comprehension is faster than for loop
 
-    av_spectra = np.array(av_spectra)  # convert to ndarray once
+    av_spectra = np.array(av_spectra)  # convert to ndarray 
     mean_spec = np.nanmean(av_spectra, axis=0)
-
+    _25_perc = np.quantile(av_spectra, 0.25, axis=0)
+    _75_perc = np.quantile(av_spectra, 0.75, axis=0)
     if ax is None:
         fig, ax = plt.subplots()
 
     ax.plot(wvl, mean_spec, color=color, label='mean spectrum')
+    ax.fill_between(wvl, _25_perc, _75_perc, color=color, alpha=0.4, label='25th to 75th')
     if med:
         ax.plot(wvl, np.nanmedian(av_spectra, axis=0),
                 alpha=0.5, label='median spectrum')
