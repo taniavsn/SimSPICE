@@ -30,12 +30,12 @@ from datetime import datetime
 
 plt.rcParams['image.origin'] = 'lower'
 
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 
 simspice = "/d0/tvaresano/SimSPICE/"
 torch.cuda.set_device(2)
 
-dataset_path = simspice+"spectra_train_NeMg_10files.nc"
+dataset_path = simspice+"spectra_train_NeMg_20files.nc"
 dataset = SproutDataset(dataset_path=dataset_path, augmentation_type='single', 
                         csv_files=simspice+'L2_names.csv',
                         type_distrib_shift='uniform', type_distrib_gain='uniform',
@@ -48,7 +48,7 @@ dataloader = DataLoader(
             shuffle=True)
 
 
-id = 'gain01-5_10file_shift005'
+id = 'gain01-5_20file_shift005_bs512'
 
 # Train model
 model = SA.SimSiam(output_dim=32, backbone_output_dim=64, hidden_layer_dim=64)
@@ -57,7 +57,7 @@ accelerator = "gpu" if torch.cuda.is_available() else "cpu"
 wandb_logger = WandbLogger(project="Resnet50_SimSiam_single32_NeMg", 
                            name=f"{id}_{datetime.today().strftime('%Y-%m-%d')}", id=id, log_model=True)
 
-trainer = pl.Trainer(max_epochs=10, devices=1, accelerator=accelerator, logger=wandb_logger)
+trainer = pl.Trainer(max_epochs=6, devices=1, accelerator=accelerator, logger=wandb_logger)
 trainer.fit(model=model, train_dataloaders=dataloader)
 
 
