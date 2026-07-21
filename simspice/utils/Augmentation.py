@@ -8,167 +8,139 @@ import random
 from scipy.stats import poisson
 warnings.filterwarnings("ignore")
 
-class Augmentation():
+import random
+import numpy as np
+from scipy.interpolate import interp1d
 
-    def __init__(self, 
-                 mu_doppler=0, sigma = .4, num_hits = 2,
-                 shift_range=(-0.4, 0.4), gain_range=(0.1, 3), 
-                 type_distrib_gain='Gaussian', type_distrib_shift='Gaussian',
-                 add_noise=True,
-                 normalize_intensity=False, log_space=False):
-        '''
-        mu_doppler: mean of distribution of the simulated doppler shift (should be 0)
-        shift_range: range of doppler shift values
 
-        num_hits: number of occurences of GCRs on an item (spectrum)
-
-        gain_range = range of gain values
-        sigma: standard deviation of the distribution of gain, if Gaussian chosen.
-
-        normalize_intensity: Bool
-        log_space: Bool
-
-        '''
-        self.normalize_intensity = normalize_intensity 
+class Augmentation:
+    def __init__(
+        self,
+        mu_doppler=0.0,
+        sigma_shift=0.1,
+        sigma_gain=0.1,
+        shift_range=(-0.4, 0.4),
+        gain_range=(0.8, 1.2),
+        type_distrib_gain="uniform",
+        type_distrib_shift="Gaussian",
+        add_noise=True,
+        add_background=True,
+        background_range=(-0.02, 0.02),
+        normalize_intensity=False,
+        log_space=False,
+    ):
+        self.normalize_intensity = normalize_intensity
         self.log_space = log_space
         self.add_noise = add_noise
+        self.add_background = add_background
 
-        # GCR parameters
-        self.num_hits = num_hits
-
-        # Shift parameters
         self.shift_range = shift_range
         self.type_distrib_shift = type_distrib_shift
-        self.mu_doppler = mu_doppler 
+        self.mu_doppler = mu_doppler
+        self.sigma_shift = sigma_shift
 
-        # Gain parameters
-        self.sigma = sigma
         self.type_distrib_gain = type_distrib_gain
         self.gain_range = gain_range
+        self.sigma_gain = sigma_gain
 
-        self.methods_list = [method for method in dir(Augmentation) if callable(getattr(Augmentation, method)) and method.startswith('add')]
-        
-        
+        self.background_range = background_range
 
 
-    def add_shift_spectrum(self, spectrum):
-        """
-        Shifts a spectrum along a wavelength array.
-
-        Parameters:
-        spectrum: Dataset row object (all_spectra.isel(index=index))
-        shift (float): The shift in wavelength units (positive for redshift, negative for blueshift).
-
-        Returns:
-        np.ndarray: Shifted spectrum aligned with the original wavelength array.
-        """
-        # Interpolation function for the original spectrum
-        wavelength = spectrum['wvl'].values
-        flux = spectrum['flux'].values
-        mask = spectrum['mask'].values
-        if self.type_distrib_shift == 'uniform':
-            shift = random.uniform(self.shift_range[0], self.shift_range[1]) 
+    ## ADD DOPPLER SHIFT
+    def add_shift_spectrum(self, wavelength, flux, mask=None):
+        if self.type_distrib_shift.lower() == "uniform":
+            shift = random.uniform(self.shift_range[0], self.shift_range[1])
         else:
-            shift = random.gauss(self.mu_doppler, self.sigma) 
-        interp_func = interp1d(wavelength + shift, flux, bounds_error=False, fill_value=0)
-        shifted_spectrum = interp_func(wavelength)
-        interp_func_mask = interp1d(wavelength + shift, mask, bounds_error=False, fill_value=0)
-        shifted_mask = interp_func_mask(wavelength)
-        
-        return shifted_spectrum, shifted_mask
+            shift = random.gauss(self.mu_doppler, self.sigma_shift)
+            shift = np.clip(shift, self.shift_range[0], self.shift_range[1] )
 
+        flux_interpolator = interp1d( wavelength + shift, flux, kind="linear", bounds_error=False, fill_value=0.0)
+        shifted_flux = flux_interpolator(wavelength)
+        shifted_mask = None
 
+        if mask is not None:
+            mask_interpolator = interp1d(
+                wavelength + shift,
+                mask.astype(float),
+                kind="nearest",
+                bounds_error=False,
+                fill_value=0.0, )
+
+            shifted_mask = (mask_interpolator(wavelength) >= 0.5)
+
+        return shifted_flux, shifted_mask
+
+    ## ADD GAIN
     def add_gain_spectrum(self, spectrum):
-        '''
-        Applies a gain to the spectrum
-        The gain is chosen randomly from either a uniform or gaussian distribution
+        if self.type_distrib_gain.lower() == "uniform":
+            gain = random.uniform(self.gain_range[0], self.gain_range[1])
+        else:
+            gain_mean = 0.5 * (self.gain_range[0] + self.gain_range[1])
+            gain = random.gauss(gain_mean, self.sigma_gain)
+            gain = np.clip(gain, self.gain_range[0], self.gain_range[1])
 
-        spectrum: Dataset row object (all_spectra.isel(index=index))
-        '''
-        if isinstance(spectrum, np.ndarray):
-            if self.type_distrib_gain == 'uniform':
-                return spectrum*random.uniform(self.gain_range[0], self.gain_range[1]) 
+        return spectrum * gain
+
+    ## ADD BACKGROUND
+    def add_background_spectrum(self, spectrum):
+        reference = np.nanpercentile(np.abs(spectrum), 99)
+        if not np.isfinite(reference) or reference <= 0:
+            return spectrum
+        background_fraction = random.uniform(self.background_range[0], self.background_range[1])
+        return (spectrum + background_fraction * reference)
+
+
+    ## ADD NOISE
+    def add_photon_noise(self, spectrum):
+        spectrum = np.asarray(spectrum, dtype=np.float32,).copy()
+
+        spectrum = np.nan_to_num(spectrum, nan=0.0, posinf=0.0, neginf=0.0)
+
+        spectrum = np.clip(spectrum, a_min=0.0, a_max=None)
+
+        return (spectrum + np.random.poisson(spectrum) / 8.0)
+
+    def preprocess(self, flux):
+        flux = np.asarray(flux, dtype=np.float32).copy()
+
+        flux = np.nan_to_num(flux, nan=0.0, posinf=0.0, neginf=0.0)
+
+        if self.normalize_intensity:
+            scale = np.nanpercentile(np.abs(flux), 99)
+
+            if np.isfinite(scale) and scale > 0:
+                flux = flux / scale
             else:
-                return spectrum*random.gauss((self.gain_range[1] - self.gain_range[0])/2, self.sigma)  # Guassian distribution
-        else:
-            if self.type_distrib_gain == 'uniform':
-                return spectrum['flux'].values*random.uniform(self.gain_range[0], self.gain_range[1]) 
-            else:
-                return spectrum['flux'].values*random.gauss((self.gain_range[1] - self.gain_range[0])/2, self.sigma)  # Guassian distribution
-    
+                flux = np.zeros_like(flux)
 
+        if self.log_space:
+            # Safe for normalized, nonnegative intensities.
+            flux = np.log1p(np.clip(flux, 0.0, None))
 
-    def add_photon_noise(self, spectrum):  # scipy poisson?
-        '''
-        Applies a Poisson-distributed noise to the spectrum
-
-        spectrum: Dataset row object (all_spectra.isel(index=index))
-        '''
-        # return poisson.pmf(self.k, self.mu, self.loc)
-        if isinstance(spectrum, np.ndarray):
-            spectrum[spectrum < 0] = 0
-            return spectrum+np.random.poisson(np.nan_to_num(spectrum))/8
-        else:
-            spectrum = spectrum['flux'].values
-            spectrum[spectrum < 0] = 0
-            return spectrum+np.random.poisson(np.nan_to_num(spectrum['flux'].values))/8
-
-
-
-    def add_GCR_noise(self, spectrum):
-        '''
-        Applies random GCR spikes to the data at a specified number of points.
-        
-        Parameters:
-        - spectrum: Dataset row object (all_spectra.isel(index=index))
-        - num_hits: The number of pixels in the spectrum that will get a GCR spike.
-        '''
-        if isinstance(spectrum, np.ndarray):
-            intensity_range = (np.max(spectrum) * 2, np.max(spectrum) * 2.5)
-            noisy_spectrum = spectrum.copy().astype(float)
-            num_points = len(spectrum)
-        else:
-            intensity_range = (np.max(spectrum['flux'].values) * 1.5, np.max(spectrum['flux'].values) * 2)
-            noisy_spectrum = spectrum['flux'].values.copy().astype(float)
-            num_points = len(spectrum['flux'].values)
-        
-        valid_indices = np.arange(5, num_points - 5)  # Exclude five first and last indices
-    
-        # Randomly select indices for GCR hits
-        hit_indices = np.random.choice(valid_indices, size=self.num_hits, replace=False)
-        
-        # Generate random spike intensities within the specified range
-        spikes = np.random.uniform(intensity_range[0], intensity_range[1], size=self.num_hits)
-        # Apply spikes at the selected indices
-        noisy_spectrum[hit_indices] += spikes
-        
-        return noisy_spectrum
-    
+        return flux
 
     def run_all_augmentations(self, spectrum):
-        '''
-        applies augmentation methods successively in this order: 
-        1. Shift
-        2. Gain
-        3. Photon noise
-        4. GCR noise
-        Returns augmented spectrum and shifted mask
-        '''
-        if self.normalize_intensity:
-            if isinstance(spectrum, np.ndarray):
-                spectrum = spectrum/np.sum(spectrum)
-            else:
-                spectrum['flux'].values = spectrum['flux'].values/np.sum(spectrum['flux'].values)
-        if self.log_space:
-            if isinstance(spectrum, np.ndarray):
-                spectrum = np.abs(np.nan_to_num(np.log(spectrum),nan=0, posinf=0, neginf=0))
-            else:
-                spectrum['flux'].values = np.abs(np.nan_to_num(np.log(spectrum['flux'].values),nan=0, posinf=0, neginf=0))
-        spectrum, mask = self.add_shift_spectrum(spectrum)
-        spectrum = self.add_gain_spectrum(spectrum)
+        wavelength = np.asarray(spectrum["wvl"].values, dtype=np.float64)
+        flux = np.asarray(spectrum["flux"].values, dtype=np.float32).copy()
+        mask = None
+        if "mask" in spectrum:
+            mask = np.asarray(spectrum["mask"].values, dtype=bool).copy()
+
+        # Apply physical changes in linear intensity space.
+        flux, mask = self.add_shift_spectrum(
+            wavelength=wavelength, flux=flux,
+            mask=mask)
+
+        flux = self.add_gain_spectrum(flux)
+
+        if self.add_background:
+            flux = self.add_background_spectrum(flux)
+
         if self.add_noise:
-            spectrum = self.add_photon_noise(spectrum)
-        # spectrum = self.add_GCR_noise(spectrum)
-        
-        return spectrum, mask
+            flux = self.add_photon_noise(flux)
+
+        # Normalize/log only after physical augmentations.
+        flux = self.preprocess(flux)
+
+        return flux.astype(np.float32), mask
 

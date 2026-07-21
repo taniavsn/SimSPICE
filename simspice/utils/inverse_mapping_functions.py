@@ -144,21 +144,33 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster,
     return av_spectra
 
 
-
+from matplotlib.colors import BoundaryNorm
+from matplotlib.cm import get_cmap
+import xarray as xr
 def map_clusters(labels, dataset_path="spectra_train.nc", ax=None,
                  data_dir='data_L2\\', selected_clusters=None, 
                  max_ticks=10, contour=False,
                  croplatbottom=725, croplattop=120,
                  key='Ne VIII 770 (Merged)', linewidth=1,
                  file_index=0, cmap=None, norm=None):
-    import xarray as xr
+    
     dataset = xr.open_dataset(dataset_path)
 
     # --- Build consistent colormap across all clusters ---
     all_clusters = np.unique(labels[~np.isnan(labels)])
-    if cmap is None or norm is None:
-        cmap = get_cmap("cet_glasbey_bw", len(all_clusters))
-        norm = Normalize(vmin=int(all_clusters.min()), vmax=int(all_clusters.max()))
+    # Keep noise separate.
+    valid_clusters = all_clusters[ all_clusters != -1 ]
+
+    if cmap is None:
+        cmap = get_cmap("cet_glasbey_bw", max(len(valid_clusters), 1))
+
+    if norm is None:
+        if len(valid_clusters) > 0:
+            boundaries = np.arange(
+                valid_clusters.min() - 0.5,
+                valid_clusters.max() + 1.5 )
+
+            norm = BoundaryNorm(boundaries, cmap.N)
 
     if ax is None:
         fig, ax = plt.subplots()
