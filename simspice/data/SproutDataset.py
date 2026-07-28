@@ -34,6 +34,7 @@ class SproutDataset(Dataset, Sprout_ML):
         type_distrib_gain="uniform",
         type_distrib_shift="Gaussian",
         normalize_intensity=True,
+        add_noise=True,
     ):
         self.file_names = pd.read_csv(
             os.path.join(file_dir, csv_files)
@@ -54,7 +55,7 @@ class SproutDataset(Dataset, Sprout_ML):
             type_distrib_shift=type_distrib_shift,
             normalize_intensity=normalize_intensity,
             log_space=log_space,
-            add_noise=True,
+            add_noise=add_noise,
             add_background=True,
         )
 

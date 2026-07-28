@@ -23,87 +23,91 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
     def __init__(self, csv_files: str = 'L2_names.csv',
                  file_dir: str = ".",
                  dataset_path="/d0/tvaresano/SimSPICE/spectra_train_NeMg.nc",
-                 batch_size: int = BATCH_SIZE, 
-                 augmentation_type: str = 'single', log_space=False, 
-                 mu_doppler=0, sigma=1, num_hits=0,
-                 shift_range=(-0.4, 0.4), gain_range=(0.1, 3), 
-                 type_distrib_gain='Gaussian', type_distrib_shift='Gaussian', 
-                 normalize_intensity=False):
-        '''
-        file_dir (str): path to the folder containing the images
-        augmentation (str): whether to just return the original spectrum (None)
-                                    perform single augmentation ('single') 
-                                    or perform double augmentation ('double').
-                                    No augmentation returns a single spectrum, single or double augmentation returns two.
-        log10space (Bool): decides wether the output spectra will be in log space or not.
-        '''
-        # super().__init__(self, filename)
-        self.file_names = pd.read_csv(os.path.join(file_dir, csv_files))  # get all the file names 
-        self.batch_size = batch_size
-        self.file_dir = file_dir
-
-        # Get all spectra
-        self.all_spectra = xr.open_dataset(dataset_path)
-
-        # set up augmentations
-        self.augmentation_type = augmentation_type
-        self.log_space = log_space
-
-        self.normalize_intensity = normalize_intensity 
-
-        # GCR parameters
-        self.num_hits = num_hits
-
-        # Shift parameters
-        self.shift_range = shift_range
-        self.type_distrib_shift = type_distrib_shift
-        self.mu_doppler = mu_doppler 
-
-        # Gain parameters
-        self.sigma = sigma
-        self.type_distrib_gain = type_distrib_gain
-        self.gain_range = gain_range
+                 augmentation_type="double",
+                log_space=False,
+                mu_doppler=0.0,
+                sigma_shift=0.1,
+                sigma_gain=0.1,
+                shift_range=(-0.4, 0.4),
+                gain_range=(0.8, 1.2),
+                type_distrib_gain="uniform",
+                type_distrib_shift="Gaussian",
+                normalize_intensity=True,
+                add_noise=True,
+            ):
+                self.file_names = pd.read_csv(
+                    os.path.join(file_dir, csv_files)
+                )
         
-    def __len__(self) -> int:  # how many spectra do we have?
-        '''
-        Length of the dataset
-        '''
-        return len(self.all_spectra['index'])
-    
+                self.file_dir = file_dir
+                self.all_spectra = xr.open_dataset(dataset_path)
+        
+                self.augmentation_type = augmentation_type
+        
+                self.augmenter = Augmentation(
+                    mu_doppler=mu_doppler,
+                    sigma_shift=sigma_shift,
+                    sigma_gain=sigma_gain,
+                    shift_range=shift_range,
+                    gain_range=gain_range,
+                    type_distrib_gain=type_distrib_gain,
+                    type_distrib_shift=type_distrib_shift,
+                    normalize_intensity=normalize_intensity,
+                    log_space=log_space,
+                    add_noise=add_noise,
+                    add_background=True,
+                )
+        
+    def __len__(self):
+        return self.all_spectra.sizes["index"]
+
     def __getitem__(self, index):
-        '''
-        returns two spectra, with a flag that makes it return two augmented 
-        spectra (based on an original) or the original and an augmented version.
-        Args:
-            idx (int): index of the spectrum to retrieve
-        '''
-        aug = Augmentation(mu_doppler=self.mu_doppler, sigma = self.sigma, num_hits = self.num_hits,
-                            shift_range=self.shift_range, gain_range=self.gain_range, 
-                            type_distrib_gain=self.type_distrib_gain, type_distrib_shift=self.type_distrib_shift, 
-                            normalize_intensity=self.normalize_intensity, log_space=self.log_space)
-        
         row = self.all_spectra.isel(index=index)
 
-        spectrum = row['flux'].values
-        # wvl_array = row['wvl'].values
-        # mask = row['mask'].values
-        if self.log_space:
-            spectrum = np.nan_to_num(np.log10(spectrum), nan=0, posinf=0, neginf=0)
+        original_flux = np.asarray(
+            row["flux"].values,
+            dtype=np.float32,
+        ).copy()
 
-        ## initialize the augmentation : return either the original spectrum 
-        #  and 1 augmentation, or 2 augmentations (of a single item) 
-        if self.augmentation_type is None: 
-            return torch.Tensor(spectrum)[None, :] #adds 1 extra dimension (channels) 
+        original_flux = self.augmenter.preprocess(
+            original_flux
+        )
 
-        elif self.augmentation_type.lower() == 'double':
-            spec_aug_1, mask_aug_1 = aug.run_all_augmentations(row)
-            spec_aug_2, mask_aug_2 = aug.run_all_augmentations(row)
-            return torch.Tensor(spec_aug_1)[None, :], torch.Tensor(spec_aug_2)[None, :] #, mask_aug_1, mask_aug_2, wvl_array
+        original_tensor = torch.from_numpy(
+            original_flux
+        ).unsqueeze(0)
 
-        elif self.augmentation_type.lower() == 'single':
-            spec_aug_1, mask_aug_1 = aug.run_all_augmentations(row)
-            return torch.Tensor(spectrum)[None, :], torch.Tensor(spec_aug_1)[None, :] #, mask, mask_aug_1, wvl_array
-        
+        if self.augmentation_type is None:
+            return original_tensor
 
+        augmentation_type = self.augmentation_type.lower()
 
-        
+        if augmentation_type == "double":
+            augmented_1, _ = (
+                self.augmenter.run_all_augmentations(row)
+            )
+            augmented_2, _ = (
+                self.augmenter.run_all_augmentations(row)
+            )
+
+            return (
+                torch.from_numpy(augmented_1).unsqueeze(0),
+                torch.from_numpy(augmented_2).unsqueeze(0),
+            )
+
+        if augmentation_type == "single":
+            augmented, _ = (
+                self.augmenter.run_all_augmentations(row)
+            )
+
+            return (
+                original_tensor,
+                torch.from_numpy(augmented).unsqueeze(0),
+            )
+
+        raise ValueError(
+            "augmentation_type must be None, "
+            "'single', or 'double'."
+        )
+
+    

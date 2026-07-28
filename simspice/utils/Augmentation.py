@@ -91,14 +91,15 @@ class Augmentation:
 
 
     ## ADD NOISE
-    def add_photon_noise(self, spectrum):
-        spectrum = np.asarray(spectrum, dtype=np.float32,).copy()
-
+    def add_photon_noise(self, spectrum, count_scale=100.0):
+        spectrum = np.asarray(spectrum, dtype=np.float32).copy()
         spectrum = np.nan_to_num(spectrum, nan=0.0, posinf=0.0, neginf=0.0)
+        positive_signal = np.clip(spectrum, 0.0, None)
+        expected_counts = (positive_signal * count_scale)
+        noisy_signal = (np.random.poisson(expected_counts) / count_scale)
+        return noisy_signal.astype(np.float32)
 
-        spectrum = np.clip(spectrum, a_min=0.0, a_max=None)
 
-        return (spectrum + np.random.poisson(spectrum) / 8.0)
 
     def preprocess(self, flux):
         flux = np.asarray(flux, dtype=np.float32).copy()
