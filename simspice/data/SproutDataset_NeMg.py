@@ -34,6 +34,7 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
                 type_distrib_shift="Gaussian",
                 normalize_intensity=True,
                 add_noise=True,
+                background_range=(-0.02, 0.02)
             ):
                 self.file_names = pd.read_csv(
                     os.path.join(file_dir, csv_files)
@@ -56,7 +57,7 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
                     log_space=log_space,
                     add_noise=add_noise,
                     add_background=True,
-                )
+                    background_range=background_range )
         
     def __len__(self):
         return self.all_spectra.sizes["index"]

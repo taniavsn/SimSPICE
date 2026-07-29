@@ -31,6 +31,7 @@ class SproutDataset(Dataset, Sprout_ML):
         sigma_gain=0.1,
         shift_range=(-0.4, 0.4),
         gain_range=(0.8, 1.2),
+        background_range=(-0.02, 0.02),
         type_distrib_gain="uniform",
         type_distrib_shift="Gaussian",
         normalize_intensity=True,
@@ -57,7 +58,7 @@ class SproutDataset(Dataset, Sprout_ML):
             log_space=log_space,
             add_noise=add_noise,
             add_background=True,
-        )
+            background_range=background_range )
 
     def __len__(self):
         return self.all_spectra.sizes["index"]
