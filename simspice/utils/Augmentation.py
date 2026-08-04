@@ -27,9 +27,13 @@ class Augmentation:
         add_background=True,
         background_range=(-0.02, 0.02),
         normalize_intensity=False,
+        normalization_method="area",
+        normalization_eps=1e-8,
         log_space=False,
     ):
         self.normalize_intensity = normalize_intensity
+        self.normalization_method = normalization_method
+        self.normalization_eps = normalization_eps
         self.log_space = log_space
         self.add_noise = add_noise
         self.add_background = add_background
@@ -99,26 +103,67 @@ class Augmentation:
         noisy_signal = (np.random.poisson(expected_counts) / count_scale)
         return noisy_signal.astype(np.float32)
 
+    ## Normalize by integrated spectra
+    def normalize_spectrum(self, flux, wavelength=None):
+        """
+        Normalize a spectrum by its integrated area.
 
+        The spectral dimension must be the final axis.
+        """
+        flux = np.asarray(flux, dtype=np.float32)
+        positive_flux = np.clip(flux, 0.0, None)
 
-    def preprocess(self, flux):
+        if self.normalization_method.lower() == "area":
+            if wavelength is None:
+                raise ValueError("wavelength must be provided for area normalization.")
+
+            wavelength = np.asarray(wavelength, dtype=np.float32)
+            if wavelength.shape[-1] != flux.shape[-1]:
+                raise ValueError(
+                    f"Wavelength has {wavelength.shape[-1]} bins, "
+                    f"but flux has {flux.shape[-1]} bins."
+                )
+
+            scale = np.trapezoid(positive_flux, x=wavelength, axis=-1)
+
+        elif self.normalization_method.lower() == "sum":
+            # Useful for concatenated, evenly sampled spectral windows.
+            scale = np.sum(positive_flux, axis=-1)
+
+        elif self.normalization_method.lower() == "percentile":
+            scale = np.nanpercentile( np.abs(flux), 99, axis=-1)
+
+        else:
+            raise ValueError(
+                f"Unknown normalization method: "
+                f"{self.normalization_method!r}"
+            )
+
+        scale = np.asarray(scale)
+
+        # Restore the spectral axis for broadcasting.
+        scale = np.expand_dims(scale, axis=-1)
+
+        valid = np.isfinite(scale) & (scale > self.normalization_eps)
+
+        return np.divide(
+            positive_flux,
+            scale,
+            out=np.zeros_like(positive_flux),
+            where=valid,
+        )
+
+    def preprocess(self, flux, wavelength=None):
         flux = np.asarray(flux, dtype=np.float32).copy()
-
         flux = np.nan_to_num(flux, nan=0.0, posinf=0.0, neginf=0.0)
 
         if self.normalize_intensity:
-            scale = np.nanpercentile(np.abs(flux), 99)
-
-            if np.isfinite(scale) and scale > 0:
-                flux = flux / scale
-            else:
-                flux = np.zeros_like(flux)
+            flux = self.normalize_spectrum(flux, wavelength=wavelength)
 
         if self.log_space:
-            # Safe for normalized, nonnegative intensities.
             flux = np.log1p(np.clip(flux, 0.0, None))
 
-        return flux
+        return flux.astype(np.float32)
 
     def run_all_augmentations(self, spectrum):
         wavelength = np.asarray(spectrum["wvl"].values, dtype=np.float64)
@@ -141,7 +186,9 @@ class Augmentation:
             flux = self.add_photon_noise(flux)
 
         # Normalize/log only after physical augmentations.
-        flux = self.preprocess(flux)
+        flux = self.preprocess(flux, wavelength=wavelength)
 
         return flux.astype(np.float32), mask
+
+
 

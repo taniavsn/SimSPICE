@@ -33,6 +33,8 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
                 type_distrib_gain="uniform",
                 type_distrib_shift="Gaussian",
                 normalize_intensity=True,
+                normalization_method="area",
+                normalization_eps=1e-8,
                 add_noise=True,
                 background_range=(-0.02, 0.02)
             ):
@@ -54,6 +56,8 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
                     type_distrib_gain=type_distrib_gain,
                     type_distrib_shift=type_distrib_shift,
                     normalize_intensity=normalize_intensity,
+                    normalization_method=normalization_method,
+                    normalization_eps=normalization_eps,
                     log_space=log_space,
                     add_noise=add_noise,
                     add_background=True,
@@ -64,19 +68,11 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
 
     def __getitem__(self, index):
         row = self.all_spectra.isel(index=index)
+        original_flux = np.asarray(row["flux"].values, dtype=np.float32,).copy()
+        wavelength = np.asarray(row["wvl"].values, dtype=np.float64).copy()
 
-        original_flux = np.asarray(
-            row["flux"].values,
-            dtype=np.float32,
-        ).copy()
-
-        original_flux = self.augmenter.preprocess(
-            original_flux
-        )
-
-        original_tensor = torch.from_numpy(
-            original_flux
-        ).unsqueeze(0)
+        original_flux = self.augmenter.preprocess(original_flux, wavelength=wavelength)
+        original_tensor = torch.from_numpy(original_flux).unsqueeze(0)
 
         if self.augmentation_type is None:
             return original_tensor
@@ -84,12 +80,8 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
         augmentation_type = self.augmentation_type.lower()
 
         if augmentation_type == "double":
-            augmented_1, _ = (
-                self.augmenter.run_all_augmentations(row)
-            )
-            augmented_2, _ = (
-                self.augmenter.run_all_augmentations(row)
-            )
+            augmented_1, _ = (self.augmenter.run_all_augmentations(row))
+            augmented_2, _ = (self.augmenter.run_all_augmentations(row))
 
             return (
                 torch.from_numpy(augmented_1).unsqueeze(0),
@@ -97,18 +89,12 @@ class SproutDataset(Dataset, Sprout_ML):  # offspring of both classes
             )
 
         if augmentation_type == "single":
-            augmented, _ = (
-                self.augmenter.run_all_augmentations(row)
-            )
+            augmented, _ = (self.augmenter.run_all_augmentations(row))
 
-            return (
-                original_tensor,
-                torch.from_numpy(augmented).unsqueeze(0),
-            )
+            return (original_tensor, torch.from_numpy(augmented).unsqueeze(0),)
 
         raise ValueError(
             "augmentation_type must be None, "
-            "'single', or 'double'."
-        )
+            "'single', or 'double'.")
 
     

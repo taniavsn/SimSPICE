@@ -144,148 +144,242 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster,
     return av_spectra
 
 
-from matplotlib.colors import BoundaryNorm
+from matplotlib.colors import BoundaryNorm, ListedColormap
 from matplotlib.cm import get_cmap
 import xarray as xr
-def map_clusters(labels, dataset_path="spectra_train.nc", ax=None,
-                 data_dir='data_L2\\', selected_clusters=None, 
-                 max_ticks=10, contour=False,
-                 croplatbottom=725, croplattop=120,
-                 key='Ne VIII 770 (Merged)', linewidth=1,
-                 file_index=0, cmap=None, norm=None):
-    
+def make_cluster_style(labels, cmap):
+    cluster_ids = np.sort(np.unique(labels[np.isfinite(labels)])).astype(int)
+
+    # Exclude HDBSCAN/noise label
+    valid_clusters = cluster_ids[cluster_ids >= 0]
+
+    if len(valid_clusters) == 0:
+        raise ValueError("No valid clusters found.")
+
+    # This assumes cluster labels are 0, 1, ..., K-1
+    n_colors = int(valid_clusters.max()) + 1
+    base_cmap = plt.colormaps[cmap]
+    colors = [base_cmap(i) for i in range(n_colors)]
+
+    cmap = ListedColormap(colors, name="cluster_colors")
+    cmap.set_bad(color="none")       # NaN values
+    cmap.set_under(color="0.8")      # cluster -1/noise: pale grey
+
+    boundaries = np.arange(-0.5, n_colors + 0.5, 1)
+    norm = BoundaryNorm(boundaries, ncolors=cmap.N, clip=False)
+    return valid_clusters, cmap, norm
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+import xarray as xr
+
+from matplotlib.cm import get_cmap
+from matplotlib.colors import BoundaryNorm, ListedColormap
+from skimage import measure
+
+
+def map_clusters(
+    labels,
+    dataset_path="spectra_train.nc",
+    ax=None,
+    data_dir="data_L2\\",
+    selected_clusters=None,
+    max_ticks=10,
+    contour=False,
+    croplatbottom=725,
+    croplattop=120,
+    key="Ne VIII 770 (Merged)",
+    linewidth=1,
+    file_index=0,
+    add_colorbar=True,
+    cbar_ax=None,
+    colorbar_label="Cluster",
+    colormap="cet_glasbey_bw",
+    noise_color="#C2C2C2",
+    show_noise=True,
+):
     dataset = xr.open_dataset(dataset_path)
 
-    # --- Build consistent colormap across all clusters ---
-    all_clusters = np.unique(labels[~np.isnan(labels)])
-    # Keep noise separate.
-    valid_clusters = all_clusters[ all_clusters != -1 ]
+    # ---------------------------------------------------------
+    # Build colormap with an explicit noise category
+    # ---------------------------------------------------------
+    all_clusters = np.unique(labels[np.isfinite(labels)]).astype(int)
 
-    if cmap is None:
-        cmap = get_cmap("cet_glasbey_bw", max(len(valid_clusters), 1))
+    valid_clusters = np.sort(all_clusters[all_clusters >= 0])
+    if len(valid_clusters) == 0:
+        dataset.close()
+        raise ValueError("No non-noise clusters found.")
 
-    if norm is None:
-        if len(valid_clusters) > 0:
-            boundaries = np.arange(
-                valid_clusters.min() - 0.5,
-                valid_clusters.max() + 1.5 )
+    max_cluster_id = int(valid_clusters.max())
 
-            norm = BoundaryNorm(boundaries, cmap.N)
+    # Use a fixed sequence so cluster N always receives color N.
+    base_cmap = get_cmap(colormap)
+
+    cluster_colors = [base_cmap(cluster_id) for cluster_id in range(max_cluster_id + 1)]
+
+    # Color order:
+    # index 0 -> noise label -1
+    # index 1 -> cluster 0
+    # index 2 -> cluster 1
+    # ...
+    cmap = ListedColormap([noise_color] + cluster_colors, name="clusters_with_noise")
+
+    # NaN/masked regions are transparent
+    cmap.set_bad((1, 1, 1, 0))
+
+    # Explicit boundaries for -1, 0, 1, ..., max_cluster_id
+    boundaries = np.arange(-1.5, max_cluster_id + 1.5, 1)
+    norm = BoundaryNorm(boundaries, ncolors=cmap.N)
 
     if ax is None:
         fig, ax = plt.subplots()
+    else:
+        fig = ax.figure
 
-    # --- Extract the correct file ---
-    current_labels = labels[SIZE_CROPPED_MAP * file_index : SIZE_CROPPED_MAP * (file_index + 1)]
-    current_labels = current_labels.reshape(SHAPE_CROPPED_MAP)
+    # ---------------------------------------------------------
+    # Extract labels for requested file
+    # ---------------------------------------------------------
+    start = SIZE_CROPPED_MAP * file_index
+    stop = SIZE_CROPPED_MAP * (file_index + 1)
+
+    current_labels = labels[start:stop].reshape(SHAPE_CROPPED_MAP)
 
     if selected_clusters is not None:
-        masked_labels = np.where(np.isin(current_labels, selected_clusters), current_labels, np.nan)
+        keep = np.isin(current_labels, selected_clusters)
+
+        # Retain noise even when displaying selected clusters
+        if show_noise:
+            keep |= current_labels == -1
+
+        masked_labels = np.where(keep, current_labels, np.nan)
     else:
-        masked_labels = current_labels
+        masked_labels = current_labels.astype(float, copy=True,)
 
-    unique_clusters = np.unique(current_labels[~np.isnan(current_labels)])
+        if not show_noise:
+            masked_labels[current_labels == -1] = np.nan
 
-    # Plot into the axis
-    img = ax.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1/4)
+    displayed_clusters = np.unique(masked_labels[np.isfinite(masked_labels)]).astype(int)
 
+    # ---------------------------------------------------------
+    # Plot clusters or contours
+    # ---------------------------------------------------------
     if contour:
-        filename = str(dataset.isel(index=300+SIZE_CROPPED_MAP*file_index)['filename'].data)
-        exposure = read_spice_l2_fits(data_dir+filename, memmap=False)
+        filename = str(dataset.isel(index=(300 + SIZE_CROPPED_MAP * file_index))["filename"].data)
+        exposure = read_spice_l2_fits(data_dir + filename, memmap=False,)
         cube = exposure[key][0, :, croplattop:croplatbottom, :].data
-        ax.imshow(cube[20, :, :], aspect=1/4, cmap='gist_gray',
-                  vmax=np.nanquantile(cube[20, :, :], 0.99))
-        
-        for cluster_id in np.unique(masked_labels[~np.isnan(masked_labels)]):
+
+        ax.imshow(cube[20], aspect=1 / 4, cmap="gist_gray", vmax=np.nanquantile(cube[20], 0.99), interpolation="nearest")
+
+        # Invisible image used as the colorbar mappable
+        img = ax.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1 / 4, interpolation="nearest", alpha=0)
+
+        for cluster_id in displayed_clusters:
             binary_mask = (masked_labels == cluster_id)
             contours = measure.find_contours(binary_mask, 0.5)
             cluster_color = cmap(norm(cluster_id))
-            for contour in contours:
-                ax.plot(contour[:, 1], contour[:, 0], color=cluster_color, linewidth=linewidth)
 
-    datetime_str = str(dataset.isel(index=SIZE_CROPPED_MAP*file_index+10)['filename'].data).split('_')[3]
-    date = datetime_str[:8]  
-    time = datetime_str[9:] 
-    ax.set_title(f"{date[:4]}-{date[4:6]}-{date[6:]} T {time[:2]}:{time[2:4]}:{time[4:]}", fontsize=10)
+            for cluster_contour in contours:
+                ax.plot(cluster_contour[:, 1],
+                    cluster_contour[:, 0],
+                    color=cluster_color,
+                    linewidth=linewidth)
+
+    else:
+        img = ax.imshow(
+            masked_labels,
+            cmap=cmap,
+            norm=norm,
+            aspect=1 / 4,
+            interpolation="nearest",
+        )
+
+    # ---------------------------------------------------------
+    # Add discrete cluster colorbar
+    # ---------------------------------------------------------
+    cbar = None
+
+    if (
+        add_colorbar
+        and len(displayed_clusters) > 0
+    ):
+        has_noise = np.any(
+            displayed_clusters == -1
+        )
+
+        displayed_valid = displayed_clusters[
+            displayed_clusters >= 0
+        ]
+
+        # Reserve one tick for the noise category
+        available_ticks = (
+            max_ticks - int(has_noise)
+        )
+        available_ticks = max(
+            available_ticks,
+            1,
+        )
+
+        if len(displayed_valid) <= available_ticks:
+            valid_ticks = displayed_valid
+        else:
+            tick_indices = np.linspace(
+                0,
+                len(displayed_valid) - 1,
+                available_ticks,
+                dtype=int,
+            )
+
+            valid_ticks = displayed_valid[
+                tick_indices
+            ]
+
+        if has_noise:
+            colorbar_ticks = np.concatenate(
+                ([-1], valid_ticks)
+            )
+        else:
+            colorbar_ticks = valid_ticks
+
+        if cbar_ax is None:
+            cbar = fig.colorbar(
+                img,
+                ax=ax,
+                ticks=colorbar_ticks,
+                pad=0.02,
+                fraction=0.046,
+            )
+        else:
+            cbar = fig.colorbar(
+                img,
+                cax=cbar_ax,
+                ticks=colorbar_ticks,
+            )
+
+        cbar.set_label(colorbar_label)
+
+        cbar.ax.set_yticklabels([
+            "Noise"
+            if cluster_id == -1
+            else str(cluster_id)
+            for cluster_id in colorbar_ticks
+        ])
+
+    # ---------------------------------------------------------
+    # Date and title
+    # ---------------------------------------------------------
+    filename_for_date = str(dataset.isel(index=(SIZE_CROPPED_MAP * file_index + 10))["filename"].data)
+    datetime_str = filename_for_date.split("_")[3]
+    date = datetime_str[:8]
+    ax.set_title(f"{date[:4]}-{date[4:6]}-{date[6:]}", fontsize=10)
+
+    dataset.close()
+
+    return img, cmap, norm, cbar
 
 
 
-    return img, cmap, norm
-
-
-
-
-
-
-# def map_clusters(labels,
-#                  dataset_path="spectra_train.nc",
-#                  data_dir: str = 'data_L2\\', show=True,
-#                  return_images=True,
-#                  selected_clusters=None, max_ticks=10, contour=False,
-#                  croplatbottom: int = 725, croplattop: int = 120,
-#                  key: str = 'Ne VIII 770 (Merged)', linewidth=1):
-#     '''
-#     Maps the fits file according to the clusters determined by HDBscan
-#     selected_clusters: list
-#     '''
-    
-#     dataset = xr.open_dataset(dataset_path)
-
-#     # --- Build consistent colormap across all clusters ---
-#     all_clusters = np.unique(labels[~np.isnan(labels)])
-#     cmap = get_cmap("cet_glasbey_bw", len(all_clusters))
-#     norm = Normalize(vmin=int(all_clusters.min()), vmax=int(all_clusters.max()))
-#     images = []
-#     nbr_files = int(len(dataset['index'])/SIZE_CROPPED_MAP)
-#     for x in range(nbr_files):
-#         current_labels = labels[SIZE_CROPPED_MAP * x: SIZE_CROPPED_MAP * (x + 1)].reshape(SHAPE_CROPPED_MAP)
-
-#         if selected_clusters is not None:
-#             masked_labels = np.where(np.isin(current_labels, selected_clusters), current_labels, np.nan)
-#         else:
-#             masked_labels = current_labels
-
-#         unique_clusters = np.unique(current_labels[~np.isnan(current_labels)])
-#         print("Unique Clusters in file:", unique_clusters.size)
-
-#         # Use the global colormap + normalization
-#         img = plt.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1/4)
-#         if return_images: 
-#             images.append(img)
-#         if contour:
-#             filename = str(dataset.isel(index=300)['filename'].data)
-#             print(filename)
-            
-#             exposure = read_spice_l2_fits(data_dir+filename, memmap=False)
-#             cube = exposure[key][0, :, croplattop:croplatbottom, :].data
-#             plt.imshow(cube[20, :, :], aspect=1/4, cmap='gist_heat',
-#                        vmax=np.nanquantile(cube[20, :, :], 0.99))
-            
-#             for cluster_id in np.unique(masked_labels[~np.isnan(masked_labels)]):
-#                 binary_mask = (masked_labels == cluster_id)
-#                 contours = measure.find_contours(binary_mask, 0.5)  # threshold at 0.5
-#                 cluster_color = cmap(norm(cluster_id))
-#                 for contour in contours:
-#                     plt.plot(contour[:, 1], contour[:, 0], color=cluster_color, linewidth=linewidth)
-
-#         datetime_str = str(dataset.isel(index=SIZE_CROPPED_MAP*x+10)['filename'].data).split('_')[3]
-#         date = datetime_str[:8]  
-#         time = datetime_str[9:] 
-#         plt.title(f"{date[:4]}-{date[4:6]}-{date[6:]} T {time[:2]}:{time[2:4]}:{time[4:]}")
-
-#         # Colorbar ticks
-#         if len(unique_clusters) > max_ticks:
-#             tick_indices = np.linspace(0, len(unique_clusters) - 1, max_ticks, dtype=int)
-#             tick_labels = unique_clusters[tick_indices]
-#         else:
-#             tick_labels = unique_clusters
-
-#         cbar = plt.colorbar(img, ticks=tick_labels)
-#         cbar.ax.set_yticklabels(tick_labels.astype(int))
-#         if show:
-#             plt.show()
-#     if return_images: 
-#         return images
 
 
 
