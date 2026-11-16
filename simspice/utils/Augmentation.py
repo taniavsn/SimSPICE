@@ -173,9 +173,7 @@ class Augmentation:
             mask = np.asarray(spectrum["mask"].values, dtype=bool).copy()
 
         # Apply physical changes in linear intensity space.
-        flux, mask = self.add_shift_spectrum(
-            wavelength=wavelength, flux=flux,
-            mask=mask)
+        flux, mask = self.add_shift_spectrum(wavelength=wavelength, flux=flux, mask=mask)
 
         flux = self.add_gain_spectrum(flux)
 

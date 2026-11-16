@@ -145,7 +145,6 @@ def plot_average_spectra_cluster(labels, stacked_outputs, chosen_cluster,
 
 
 from matplotlib.colors import BoundaryNorm, ListedColormap
-from matplotlib.cm import get_cmap
 import xarray as xr
 def make_cluster_style(labels, cmap):
     cluster_ids = np.sort(np.unique(labels[np.isfinite(labels)])).astype(int)
@@ -171,14 +170,6 @@ def make_cluster_style(labels, cmap):
 
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-import xarray as xr
-
-from matplotlib.cm import get_cmap
-from matplotlib.colors import BoundaryNorm, ListedColormap
-from skimage import measure
-
 
 def map_clusters(
     labels,
@@ -196,10 +187,10 @@ def map_clusters(
     add_colorbar=True,
     cbar_ax=None,
     colorbar_label="Cluster",
-    colormap="cet_glasbey_bw",
+    colormap="tab20",
     noise_color="#C2C2C2",
-    show_noise=True,
-):
+    show_noise=True):
+
     dataset = xr.open_dataset(dataset_path)
 
     # ---------------------------------------------------------
@@ -287,23 +278,349 @@ def map_clusters(
                     linewidth=linewidth)
 
     else:
-        img = ax.imshow(
-            masked_labels,
-            cmap=cmap,
-            norm=norm,
-            aspect=1 / 4,
-            interpolation="nearest",
-        )
+        img = ax.imshow(masked_labels, cmap=cmap, norm=norm, aspect=1 / 4, interpolation="nearest")
 
     # ---------------------------------------------------------
     # Add discrete cluster colorbar
     # ---------------------------------------------------------
     cbar = None
 
-    if (
-        add_colorbar
-        and len(displayed_clusters) > 0
-    ):
+    if (add_colorbar and len(displayed_clusters) > 0):
+        has_noise = np.any(displayed_clusters == -1)
+
+        displayed_valid = displayed_clusters[displayed_clusters >= 0]
+
+        # Reserve one tick for the noise category
+        available_ticks = (max_ticks - int(has_noise))
+        available_ticks = max(available_ticks, 1,)
+
+        if len(displayed_valid) <= available_ticks:
+            valid_ticks = displayed_valid
+        else:
+            tick_indices = np.linspace(0, len(displayed_valid) - 1, available_ticks, dtype=int)
+
+            valid_ticks = displayed_valid[tick_indices]
+
+        if has_noise:
+            colorbar_ticks = np.concatenate(([-1], valid_ticks))
+        else:
+            colorbar_ticks = valid_ticks
+
+        if cbar_ax is None:
+            cbar = fig.colorbar(img, ax=ax, ticks=colorbar_ticks,
+                pad=0.02, fraction=0.046)
+        else:
+            cbar = fig.colorbar(img, cax=cbar_ax, ticks=colorbar_ticks)
+
+        cbar.set_label(colorbar_label)
+        cbar.ax.set_yticklabels(["Noise"
+            if cluster_id == -1
+            else str(cluster_id)
+            for cluster_id in colorbar_ticks ])
+
+    # ---------------------------------------------------------
+    # Date and title
+    # ---------------------------------------------------------
+    filename_for_date = str(dataset.isel(index=(SIZE_CROPPED_MAP * file_index + 10))["filename"].data)
+    datetime_str = filename_for_date.split("_")[3]
+    date = datetime_str[:8]
+    ax.set_title(f"{date[:4]}-{date[4:6]}-{date[6:]}", fontsize=10)
+
+    dataset.close()
+
+    return img, cmap, norm, cbar
+
+
+
+
+def map_clusters_multiplefiles(
+    labels,
+    dataset_path="spectra_train.nc",
+    file_index=0,
+    spectra_per_file=116160,
+    map_shape=(605, 192),
+    ax=None,
+    data_dir="data_L2",
+    selected_clusters=None,
+    max_ticks=10,
+    contour=False,
+    croplatbottom=725,
+    croplattop=120,
+    key="Ne VIII 770 (Merged)",
+    spectral_index=20,
+    linewidth=1,
+    add_colorbar=True,
+    cbar_ax=None,
+    colorbar_label="Cluster",
+    colormap="cet_glasbey_bw",
+    noise_color="#C2C2C2",
+    show_noise=True,
+    show_filename=False,
+):
+    """
+    Plot cluster labels associated with one file in a multi-file NetCDF dataset.
+
+    Parameters
+    ----------
+    labels : array-like
+        Cluster labels for exactly one file. The expected number of labels is
+        `spectra_per_file`.
+
+    dataset_path : str
+        Path to the NetCDF dataset containing all files.
+
+    file_index : int
+        Index of the file whose spectra produced `labels`.
+
+        For example, if clustering was performed with X_umap_dict[8],
+        then file_index must be 8.
+
+    spectra_per_file : int
+        Number of spectra belonging to each file.
+
+    map_shape : tuple
+        Spatial shape used to reconstruct the cluster map. Its product must
+        equal spectra_per_file.
+
+    contour : bool
+        If True, display the original SPICE raster and draw cluster contours.
+        If False, display the cluster map directly.
+    """
+
+    labels = np.asarray(labels).ravel()
+
+    # ---------------------------------------------------------
+    # Validate the label array
+    # ---------------------------------------------------------
+    expected_size = int(np.prod(map_shape))
+
+    if spectra_per_file != expected_size:
+        raise ValueError(
+            f"spectra_per_file={spectra_per_file}, but "
+            f"np.prod(map_shape)={expected_size}."
+        )
+
+    if labels.size != spectra_per_file:
+        raise ValueError(
+            f"The supplied labels contain {labels.size} values, but one "
+            f"file should contain {spectra_per_file} spectra.\n"
+            f"Expected map shape: {map_shape}."
+        )
+
+    current_labels = labels.reshape(map_shape)
+
+    # ---------------------------------------------------------
+    # Locate the corresponding file in the NetCDF dataset
+    # ---------------------------------------------------------
+    start = spectra_per_file * file_index
+    stop = spectra_per_file * (file_index + 1)
+
+    with xr.open_dataset(dataset_path) as dataset:
+        if "index" not in dataset.sizes:
+            raise KeyError("The dataset does not contain an 'index' dimension.")
+
+        dataset_size = dataset.sizes["index"]
+
+        if start >= dataset_size or stop > dataset_size:
+            number_of_complete_files = dataset_size // spectra_per_file
+
+            raise IndexError(
+                f"file_index={file_index} is outside the dataset.\n"
+                f"The dataset contains {dataset_size} spectra, corresponding "
+                f"to {number_of_complete_files} complete files."
+            )
+
+        if "filename" not in dataset:
+            raise KeyError("The dataset does not contain a 'filename' variable.")
+
+        # All spectra in this block should belong to the same file.
+        filename_block = dataset["filename"].isel(index=slice(start, stop)).values
+
+        # Convert bytes or NumPy strings to ordinary Python strings.
+        filename_block = np.asarray(filename_block).ravel()
+
+        filenames = []
+        for value in filename_block:
+            if isinstance(value, bytes):
+                value = value.decode("utf-8")
+
+            filenames.append(str(value))
+
+        unique_filenames = np.unique(filenames)
+
+        if len(unique_filenames) != 1:
+            raise ValueError(
+                f"The dataset block [{start}:{stop}] associated with "
+                f"file_index={file_index} contains multiple filenames:\n"
+                f"{unique_filenames}\n"
+                "This indicates that spectra_per_file or the file ordering "
+                "is incorrect."
+            )
+
+        filename = unique_filenames[0]
+
+    print(
+        f"Plotting labels for:\n"
+        f"  file_index: {file_index}\n"
+        f"  filename:   {filename}\n"
+        f"  indices:    [{start}:{stop}]\n"
+        f"  map shape:  {current_labels.shape}"
+    )
+
+    # ---------------------------------------------------------
+    # Build categorical colormap
+    # ---------------------------------------------------------
+    finite_labels = current_labels[np.isfinite(current_labels)]
+
+    if finite_labels.size == 0:
+        raise ValueError("The label array contains no finite labels.")
+
+    all_clusters = np.unique(finite_labels).astype(int)
+    valid_clusters = np.sort(all_clusters[all_clusters >= 0])
+
+    if len(valid_clusters) == 0:
+        raise ValueError("No non-noise clusters were found.")
+
+    max_cluster_id = int(valid_clusters.max())
+    base_cmap = get_cmap(colormap)
+
+    # Repeat colors if a finite categorical colormap, such as tab20,
+    # contains fewer colors than the number of clusters.
+    if hasattr(base_cmap, "colors"):
+        number_of_base_colors = len(base_cmap.colors)
+
+        cluster_colors = [
+            base_cmap(cluster_id % number_of_base_colors)
+            for cluster_id in range(max_cluster_id + 1)
+        ]
+    else:
+        cluster_colors = [
+            base_cmap(
+                cluster_id / max(max_cluster_id, 1)
+            )
+            for cluster_id in range(max_cluster_id + 1)
+        ]
+
+    cmap = ListedColormap(
+        [noise_color] + cluster_colors,
+        name="clusters_with_noise",
+    )
+
+    # Make masked pixels transparent.
+    cmap.set_bad((1, 1, 1, 0))
+
+    boundaries = np.arange(-1.5, max_cluster_id + 1.5, 1)
+    norm = BoundaryNorm(boundaries, ncolors=cmap.N)
+
+    # ---------------------------------------------------------
+    # Select clusters to display
+    # ---------------------------------------------------------
+    if selected_clusters is not None:
+        selected_clusters = np.asarray(selected_clusters, dtype=int,)
+
+        keep = np.isin(current_labels, selected_clusters)
+
+        if show_noise:
+            keep |= current_labels == -1
+
+        masked_labels = np.where(keep, current_labels, np.nan)
+
+    else:
+        masked_labels = current_labels.astype(float, copy=True)
+
+        if not show_noise:
+            masked_labels[current_labels == -1] = np.nan
+
+    displayed_clusters = np.unique(masked_labels[np.isfinite(masked_labels)]).astype(int)
+
+    # ---------------------------------------------------------
+    # Prepare figure
+    # ---------------------------------------------------------
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+    else:
+        fig = ax.figure
+
+    # ---------------------------------------------------------
+    # Plot contours over the corresponding SPICE file
+    # ---------------------------------------------------------
+    if contour:
+        fits_path = os.path.join(data_dir, filename)
+
+        exposure = read_spice_l2_fits(fits_path, memmap=False)
+        cube = exposure[key][0,:, croplattop:croplatbottom, :].data
+        background = cube[spectral_index]
+
+        if background.shape != current_labels.shape:
+            raise ValueError(
+                f"Spatial shape mismatch for file_index={file_index}:\n"
+                f"  FITS background: {background.shape}\n"
+                f"  cluster labels:  {current_labels.shape}\n"
+                "Check croplattop, croplatbottom, spectral extraction, "
+                "and map_shape."
+            )
+
+        ax.imshow(
+            background,
+            aspect=1 / 4,
+            cmap="gist_gray",
+            vmax=np.nanquantile(background, 0.99),
+            interpolation="nearest",
+            origin="upper",
+        )
+
+        # Invisible image used as the colorbar mappable.
+        img = ax.imshow(
+            masked_labels,
+            cmap=cmap,
+            norm=norm,
+            aspect=1 / 4,
+            interpolation="nearest",
+            origin="upper",
+            alpha=0,
+        )
+
+        for cluster_id in displayed_clusters:
+            binary_mask = (
+                masked_labels == cluster_id
+            )
+
+            contours = measure.find_contours(
+                binary_mask,
+                0.5,
+            )
+
+            cluster_color = cmap(
+                norm(cluster_id)
+            )
+
+            for cluster_contour in contours:
+                ax.plot(
+                    cluster_contour[:, 1],
+                    cluster_contour[:, 0],
+                    color=cluster_color,
+                    linewidth=linewidth,
+                )
+
+    # ---------------------------------------------------------
+    # Plot cluster map directly
+    # ---------------------------------------------------------
+    else:
+        img = ax.imshow(
+            masked_labels,
+            cmap=cmap,
+            norm=norm,
+            aspect=1 / 4,
+            interpolation="nearest",
+            origin="upper",
+        )
+
+    # ---------------------------------------------------------
+    # Add discrete colorbar
+    # ---------------------------------------------------------
+    cbar = None
+
+    if add_colorbar and len(displayed_clusters) > 0:
         has_noise = np.any(
             displayed_clusters == -1
         )
@@ -312,12 +629,8 @@ def map_clusters(
             displayed_clusters >= 0
         ]
 
-        # Reserve one tick for the noise category
-        available_ticks = (
-            max_ticks - int(has_noise)
-        )
         available_ticks = max(
-            available_ticks,
+            max_ticks - int(has_noise),
             1,
         )
 
@@ -360,8 +673,7 @@ def map_clusters(
         cbar.set_label(colorbar_label)
 
         cbar.ax.set_yticklabels([
-            "Noise"
-            if cluster_id == -1
+            "Noise" if cluster_id == -1
             else str(cluster_id)
             for cluster_id in colorbar_ticks
         ])
@@ -369,18 +681,27 @@ def map_clusters(
     # ---------------------------------------------------------
     # Date and title
     # ---------------------------------------------------------
-    filename_for_date = str(dataset.isel(index=(SIZE_CROPPED_MAP * file_index + 10))["filename"].data)
-    datetime_str = filename_for_date.split("_")[3]
-    date = datetime_str[:8]
-    ax.set_title(f"{date[:4]}-{date[4:6]}-{date[6:]}", fontsize=10)
+    filename_parts = filename.split("_")
 
-    dataset.close()
+    try:
+        datetime_str = filename_parts[3]
+        date = datetime_str[:8]
+
+        title = (
+            f"{date[:4]}-{date[4:6]}-{date[6:8]}"
+        )
+    except IndexError:
+        title = f"File {file_index}"
+
+    if show_filename:
+        title += f"\n{filename}"
+
+    ax.set_title(
+        title,
+        fontsize=10,
+    )
 
     return img, cmap, norm, cbar
-
-
-
-
 
 
 def map_item_map(item_nbr: int,

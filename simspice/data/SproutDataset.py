@@ -67,6 +67,7 @@ class SproutDataset(Dataset, Sprout_ML):
     def __len__(self):
         return self.all_spectra.sizes["index"]
 
+    # add a parameter that would build and add the 2nd channel
     def __getitem__(self, index):
         row = self.all_spectra.isel(index=index)
         wavelength = np.asarray(row["wvl"].values, dtype=np.float32,).copy()
