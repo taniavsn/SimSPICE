@@ -77,9 +77,7 @@ class SproutDataset(Dataset):
         return self.all_spectra.sizes["index"]
 
     def _encode(self, flux, mask=None):
-        features, m = encode_window_invariant(
-            flux, mask=mask, window_lengths=self.window_lengths
-        )
+        features, m = encode_window_invariant(flux, mask=mask, window_lengths=self.window_lengths)
         return torch.from_numpy(features), torch.tensor(m, dtype=torch.float32)
 
     def _encode_augmented(self, row, index):
